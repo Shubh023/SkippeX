@@ -1,6 +1,6 @@
 [submodule "SkippeX/Vendor/assimp"]
-    path = SkippeX/Vendor/assimp
-    url = https://github.com/assimp/assimp.git
+	path = SkippeX/Vendor/assimp
+	url = https://github.com/assimp/assimp.git
     branch = master
 [submodule "SkippeX/Vendor/glad"]
     path = SkippeX/Vendor/glad
