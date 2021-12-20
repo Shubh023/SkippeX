@@ -1,0 +1,5 @@
+[Bb]uild/
+
+cmake-build-debug 
+
+.idea
