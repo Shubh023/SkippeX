@@ -1,24 +1,24 @@
 [submodule "SkippeX/Vendor/assimp"]
-    path = SkippeX/Vendor/assimp
-    url = https://github.com/assimp/assimp.git
+	path = SkippeX/Vendor/assimp
+	url = https://github.com/assimp/assimp.git
     branch = master
 [submodule "SkippeX/Vendor/glad"]
-    path = SkippeX/Vendor/glad
-    url = https://github.com/Dav1dde/glad.git
+	path = SkippeX/Vendor/glad
+	url = https://github.com/Dav1dde/glad.git
     branch = c
 [submodule "SkippeX/Vendor/glfw"]
-    path = SkippeX/Vendor/glfw
-    url = https://github.com/glfw/glfw.git
+	path = SkippeX/Vendor/glfw
+	url = https://github.com/glfw/glfw.git
     branch = master
 [submodule "SkippeX/Vendor/glm"]
-    path = SkippeX/Vendor/glm
-    url = https://github.com/g-truc/glm.git
+	path = SkippeX/Vendor/glm
+	url = https://github.com/g-truc/glm.git
     branch = master
 [submodule "SkippeX/Vendor/stb"]
-    path = SkippeX/Vendor/stb
-    url = https://github.com/nothings/stb.git
+	path = SkippeX/Vendor/stb
+	url = https://github.com/nothings/stb.git
     branch = master
 [submodule "SkippeX/Vendor/bullet"]
-    path = SkippeX/Vendor/bullet
-    url = https://github.com/bulletphysics/bullet3.git
+	path = SkippeX/Vendor/bullet
+	url = https://github.com/bulletphysics/bullet3.git
     branch = master
