@@ -3,7 +3,6 @@
 
 // System Headers
 #include <glad/glad.h>
-#include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
 
 // Standard Headers
@@ -30,7 +29,7 @@ int main(int argc, char * argv[]) {
     // Create Context and Load OpenGL Functions
     glfwMakeContextCurrent(mWindow);
     gladLoadGL();
-    fprintf(stderr, "SkippeX | OpenGL Window %s\n", glGetString(GL_VERSION));
+    fprintf(stderr, "OpenGL %s\n", glGetString(GL_VERSION));
 
     // Rendering Loop
     while (glfwWindowShouldClose(mWindow) == false) {
