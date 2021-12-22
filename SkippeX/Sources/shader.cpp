@@ -131,3 +131,8 @@ void LinkedShader::Activate() {
 void LinkedShader::Delete() {
     glDeleteProgram(ID);
 }
+
+void LinkedShader::SetMat4(const std::string& name, glm::mat4 value)
+{
+    glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+}

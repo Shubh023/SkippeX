@@ -144,6 +144,7 @@ int main() {
 
     auto t_start = std::chrono::high_resolution_clock::now();
 
+    shaders.Activate();
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
         // Keep track of elapsed time
@@ -160,9 +161,7 @@ int main() {
         // Draw Shapes
         glm::mat4 transform(1.0f);
         transform = glm::rotate(transform, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
-        shaders.Activate();
-        glUniformMatrix4fv(glGetUniformLocation(shaders.ID, "transform"), 1, GL_FALSE, glm::value_ptr(transform));
-
+        shaders.SetMat4("transform", transform);
         // Issue Draw call on the buffer
         // vao.bind();
         glBindVertexArray(VAO);
