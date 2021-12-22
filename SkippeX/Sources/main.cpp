@@ -14,6 +14,7 @@
 #include <chrono>  
 #include <cstdlib>
 #include <iostream>
+#include <cmath>
 
 
 // Define Useful Variables and macros
@@ -161,12 +162,21 @@ int main() {
         // Draw Shapes
         glm::mat4 transform(1.0f);
         transform = glm::rotate(transform, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        transform = glm::scale(transform, glm::vec3(cos(time)));
         shaders.SetMat4("transform", transform);
         // Issue Draw call on the buffer
         // vao.bind();
         glBindVertexArray(VAO);
         // glDrawArrays(GL_TRIANGLES, 0, 6);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+
+
+        glm::mat4 transform2(1.0f);
+        transform2 = glm::rotate(transform2, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        transform2 = glm::scale(transform2, glm::vec3(sin(time)));
+        shaders.SetMat4("transform", transform2);
+        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, (void*)(3 * sizeof(float)));
+
 
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
