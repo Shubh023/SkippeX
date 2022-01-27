@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <cmath>
+#include <numeric>
 
 
 // Define Useful Variables and macros
@@ -51,8 +52,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
@@ -98,7 +99,7 @@ int main() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui_ImplOpenGL3_Init("#version 460");
 
 
     // Define Shaders
@@ -166,9 +167,9 @@ int main() {
     float speed = 1.0;
     ImVec4 clear_color = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
 
-
-    std::array<float, 10>  x_data = {0, 1, 2 , 3, 4, 5, 6 ,7 , 8, 9};
-    std::array<float, 10>  y_data = {0, 1, 4 , 9, 16, 25, 36 , 49, 64, 81};
+    std::vector<float> y_data(255, 0);
+    std::vector<float> x_data(100);
+    std::iota(x_data.begin(), x_data.end(), 0);
 
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
@@ -213,13 +214,13 @@ int main() {
 
         for (int i = 0; i < y_data.size(); i++)
         {
-            y_data[i] = x_data[i] * x_data[i] * speed;
+            y_data[i] = (sin(clear_color.x * x_data[i]) + cos(clear_color.y * x_data[i])) * cos(time) * speed;
         }
 
 
         ImGui::Begin("My Window");
         if (ImPlot::BeginPlot("My Plot")) {
-            ImPlot::PlotLine("My Line Plot", x_data.begin(), y_data.begin(), 10);
+            ImPlot::PlotLine("My Line Plot", &x_data[0], &y_data[0], x_data.size());
             ImPlot::EndPlot();
         }
         ImGui::End();
