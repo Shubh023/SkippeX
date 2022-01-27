@@ -7,6 +7,8 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <implot.h>
+#include <implot_internal.h>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -92,6 +94,7 @@ int main() {
     // IMGUI Stuff
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -161,6 +164,11 @@ int main() {
     shaders.Activate();
 
     float speed = 1.0;
+    ImVec4 clear_color = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+
+
+    std::array<float, 10>  x_data = {0, 1, 2 , 3, 4, 5, 6 ,7 , 8, 9};
+    std::array<float, 10>  y_data = {0, 1, 4 , 9, 16, 25, 36 , 49, 64, 81};
 
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
@@ -171,7 +179,7 @@ int main() {
         processInput(window);
 
         // Background Fill Color
-        glClearColor(0.25f, 0.25f, 0.25f, 1.0f);
+        glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -200,6 +208,20 @@ int main() {
         ImGui::Text("ImGui Window");
         ImGui::SliderFloat("Change speed", &speed, 0.0f, 10.0f);
         ImGui::Button("Toggle Draw | Explore");
+        ImGui::ColorEdit3("clear color", (float*)&clear_color);
+        ImGui::End();
+
+        for (int i = 0; i < y_data.size(); i++)
+        {
+            y_data[i] = x_data[i] * x_data[i] * speed;
+        }
+
+
+        ImGui::Begin("My Window");
+        if (ImPlot::BeginPlot("My Plot")) {
+            ImPlot::PlotLine("My Line Plot", x_data.begin(), y_data.begin(), 10);
+            ImPlot::EndPlot();
+        }
         ImGui::End();
 
         ImGui::Render();
@@ -215,6 +237,7 @@ int main() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+    ImPlot::DestroyContext();
 
     glfwDestroyWindow(window);
     glfwTerminate();

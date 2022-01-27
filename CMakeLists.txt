@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.18)
 project(SkippeX)
 
+set(OpenGL_GL_PREFERENCE GLVND)
+
 option(GLFW_BUILD_DOCS OFF)
 option(GLFW_BUILD_EXAMPLES OFF)
 option(GLFW_BUILD_TESTS OFF)
@@ -18,6 +20,8 @@ option(BUILD_OPENGL3_DEMOS OFF)
 option(BUILD_UNIT_TESTS OFF)
 add_subdirectory(SkippeX/Vendor/bullet)
 
+
+
 if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
 else()
@@ -34,17 +38,25 @@ include_directories(SkippeX/Headers/
                     SkippeX/Vendor/glfw/include/
                     SkippeX/Vendor/imgui/
                     SkippeX/Vendor/imgui/backends/
+                    SkippeX/Vendor/implot/
                     SkippeX/Vendor/glm/
                     SkippeX/Vendor/stb/)
 
 file(GLOB VENDORS_SOURCES SkippeX/Vendor/glad/src/glad.c
                           SkippeX/Vendor/imgui/*.cpp
                           SkippeX/Vendor/imgui/backends/imgui_impl_glfw.cpp
-                          SkippeX/Vendor/imgui/backends/imgui_impl_opengl3.cpp)
+                          SkippeX/Vendor/imgui/backends/imgui_impl_opengl3.cpp
+                          SkippeX/Vendor/implot/implot.cpp
+                          SkippeX/Vendor/implot/implot_items.cpp)
+
 file(GLOB PROJECT_HEADERS SkippeX/Headers/*.hpp
                           SkippeX/Vendor/imgui/backends/imgui_impl_glfw.h
-                          SkippeX/Vendor/imgui/backends/imgui_impl_opengl3.h)
+                          SkippeX/Vendor/imgui/backends/imgui_impl_opengl3.h
+                          SkippeX/Vendor/implot/implot.h
+                          SkippeX/Vendor/implot/implot_internal.h)
+
 file(GLOB PROJECT_SOURCES SkippeX/Sources/*.cpp)
+
 file(GLOB PROJECT_SHADERS SkippeX/Shaders/*.comp
                           SkippeX/Shaders/*.frag
                           SkippeX/Shaders/*.geom
