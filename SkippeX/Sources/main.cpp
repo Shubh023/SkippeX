@@ -4,6 +4,10 @@
 #include "evao.hpp"
 
 // System Headers
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -45,8 +49,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
@@ -62,9 +66,9 @@ int main() {
     }
     std::cout << "Using Window Size : " << width << " x " << height << std::endl;
 
+
     // Initialize Window
     window = glfwCreateWindow(width, height, "Skippex | OpenGL", nullptr, nullptr);
-
 
     // Check for Valid Context
     if (window == nullptr) {
@@ -84,6 +88,15 @@ int main() {
 
     // Enable or Disable VSYNC
     glfwSwapInterval(VSYNC);
+
+    // IMGUI Stuff
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+
 
     // Define Shaders
     LinkedShader shaders(std::vector<shader>({ shader(GL_VERTEX_SHADER, "file.vert"),
@@ -146,6 +159,9 @@ int main() {
     auto t_start = std::chrono::high_resolution_clock::now();
 
     shaders.Activate();
+
+    float speed = 1;
+
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
         // Keep track of elapsed time
@@ -157,7 +173,10 @@ int main() {
         // Background Fill Color
         glClearColor(0.25f, 0.25f, 0.25f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
         // Draw Shapes
         glm::mat4 transform(1.0f);
@@ -177,12 +196,24 @@ int main() {
         shaders.SetMat4("transform", transform2);
         glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, (void*)(3 * sizeof(float)));
 
+        ImGui::Begin("Window");
+        ImGui::Text("ImGui Window");
+        ImGui::Button("Toggle Draw | Explore");
+        ImGui::End();
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
         glfwPollEvents();
     }   
     shaders.Delete();
+
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     glfwDestroyWindow(window);
     glfwTerminate();

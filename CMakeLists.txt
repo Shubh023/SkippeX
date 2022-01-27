@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.18)
 project(SkippeX)
 
 option(GLFW_BUILD_DOCS OFF)
@@ -32,12 +32,18 @@ include_directories(SkippeX/Headers/
                     SkippeX/Vendor/bullet/src/
                     SkippeX/Vendor/glad/include/
                     SkippeX/Vendor/glfw/include/
-                    SkippeX/Vendor/glm/
                     SkippeX/Vendor/imgui/
+                    SkippeX/Vendor/imgui/backends/
+                    SkippeX/Vendor/glm/
                     SkippeX/Vendor/stb/)
 
-file(GLOB VENDORS_SOURCES SkippeX/Vendor/glad/src/glad.c)
-file(GLOB PROJECT_HEADERS SkippeX/Headers/*.hpp)
+file(GLOB VENDORS_SOURCES SkippeX/Vendor/glad/src/glad.c
+                          SkippeX/Vendor/imgui/*.cpp
+                          SkippeX/Vendor/imgui/backends/imgui_impl_glfw.cpp
+                          SkippeX/Vendor/imgui/backends/imgui_impl_opengl3.cpp)
+file(GLOB PROJECT_HEADERS SkippeX/Headers/*.hpp
+                          SkippeX/Vendor/imgui/backends/imgui_impl_glfw.h
+                          SkippeX/Vendor/imgui/backends/imgui_impl_opengl3.h)
 file(GLOB PROJECT_SOURCES SkippeX/Sources/*.cpp)
 file(GLOB PROJECT_SHADERS SkippeX/Shaders/*.comp
                           SkippeX/Shaders/*.frag
@@ -61,8 +67,8 @@ add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${PROJECT_HEADERS}
                                ${PROJECT_SHADERS} ${PROJECT_CONFIGS}
                                ${VENDORS_SOURCES})
 target_link_libraries(${PROJECT_NAME} assimp glfw
-                      ${GLFW_LIBRARIES} ${GLAD_LIBRARIES}
-                      BulletDynamics BulletCollision LinearMath)
+                      ${GLFW_LIBRARIES}
+        BulletDynamics BulletCollision LinearMath)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${PROJECT_NAME})
 
