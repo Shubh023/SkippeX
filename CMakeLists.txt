@@ -33,6 +33,7 @@ include_directories(SkippeX/Headers/
                     SkippeX/Vendor/glad/include/
                     SkippeX/Vendor/glfw/include/
                     SkippeX/Vendor/glm/
+                    SkippeX/Vendor/imgui/
                     SkippeX/Vendor/stb/)
 
 file(GLOB VENDORS_SOURCES SkippeX/Vendor/glad/src/glad.c)
@@ -42,6 +43,7 @@ file(GLOB PROJECT_SHADERS SkippeX/Shaders/*.comp
                           SkippeX/Shaders/*.frag
                           SkippeX/Shaders/*.geom
                           SkippeX/Shaders/*.vert)
+                          
 file(GLOB PROJECT_CONFIGS CMakeLists.txt
                           Readme.md
                          .gitattributes
