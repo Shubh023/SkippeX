@@ -22,3 +22,8 @@
 	path = SkippeX/Vendor/bullet
 	url = https://github.com/bulletphysics/bullet3.git
     branch = master
+[submodule "SkippeX/Vendor/imgui"]
+	path = SkippeX/Vendor/imgui
+	url = https://github.com/ocornut/imgui.git
+    branch = master
+
