@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 
 
-struct Vertex
+struct Vertexx
 {
     glm::vec3 position;
     glm::vec3 normal;
@@ -27,7 +27,7 @@ public:
 
 class VBO {
 public:
-    explicit VBO(std::vector<Vertex>& vertices);
+    explicit VBO(std::vector<Vertexx>& vertices);
 
     void bind() const;
     static void unbind();

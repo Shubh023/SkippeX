@@ -2,14 +2,20 @@
 #include "skippex.hpp"
 #include "shader.hpp"
 #include "evao.hpp"
+#include "Mesh.hpp"
+#include "Model.hpp"
+#include "Camera.hpp"
 
 // System Headers
+// ImGui
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+// ImGui Widgets (Implot, ...)
 #include <implot.h>
 #include <implot_internal.h>
 
+// GLAD, GLFW & GLM
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -28,8 +34,8 @@
 #define VSYNC GL_TRUE
 #define FULLSCREEN GL_FALSE
 #define RESIZABLE GL_TRUE
-int width = 1280;
-int height = 800;
+int width = 800;
+int height = 600;
 
 
 // Global GLFW Window
@@ -42,6 +48,20 @@ static void error_callback(int error, const char* description);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 
+// Function prototypes
+void KeyCallback( GLFWwindow *window, int key, int scancode, int action, int mode );
+void MouseCallback( GLFWwindow *window, double xPos, double yPos );
+void DoMovement( );
+
+// Camera
+Camera camera( glm::vec3( 0.0f, 0.0f, 3.0f ) );
+bool keys[1024];
+GLfloat lastX = 400, lastY = 300;
+bool firstMouse = true;
+bool active_mouse = false;
+
+GLfloat deltaTime = 0.0f;
+GLfloat lastFrame = 0.0f;
 
 int main() {
 
@@ -87,7 +107,8 @@ int main() {
     // Setting up Callbacks
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetErrorCallback(error_callback);
-
+    glfwSetKeyCallback( window, KeyCallback );
+    glfwSetCursorPosCallback( window, MouseCallback );
 
     // Enable or Disable VSYNC
     glfwSwapInterval(VSYNC);
@@ -103,70 +124,24 @@ int main() {
 
 
     // Define Shaders
-    LinkedShader shaders(std::vector<shader>({ shader(GL_VERTEX_SHADER, "file.vert"),
-                                               shader(GL_FRAGMENT_SHADER, "file.frag") }));
-    shaders.Compile();
-
-    // Vertex Array
-    float vertices[] = {
-         0.5f,  0.5f, 0.0f, // Top Right
-        -0.5f,  0.5f, 0.0f, // Top Left
-        -0.5f, -0.5f, 0.0f, // Bottom Left
-         0.5f,  -0.5f, 0.0f // Bottom Right
-    };
-
-    unsigned int indices[] = {
-        0, 1, 2,
-        2, 3, 0
-    };
-    
-    // VAO, VBO
-    unsigned int VAO, VBO, EBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
+    LinkedShader modelshader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
+                                                   shader(GL_FRAGMENT_SHADER, "model.frag") }));
+    modelshader.Compile();
 
 
-    // Bind VAO
-    glBindVertexArray(VAO);
+    // Define Models
+    Model nanosuit_model("nanosuit/nanosuit.obj");
 
-    // Bind VBO
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    // Set Attributes
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    // Set UP EBO
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    /*
-    
-    Vertex vertices[] =
-    {
-            Vertex{glm::vec3(-0.5f, -0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(10.0f, 10.0f, 10.0f), glm::vec2(0.0f, 0.0f)},
-            Vertex{glm::vec3( 0.0f,  0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(10.0f, 10.0f, 10.0f), glm::vec2(0.0f, 10.0f)},
-            Vertex{glm::vec3( 0.5f, -0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(10.0f, 10.0f, 10.0f), glm::vec2(10.0f, 10.0f)},
-    };
-
-    std::vector<Vertex> verts(vertices, vertices + sizeof(vertices) / sizeof(Vertex));
-    VBO vbo(verts);
-    VAO vao;
-    vao.link(vbo, 0, 3, GL_FLOAT, sizeof(float), (void*)0);
-    vbo.unbind();
-    */
-
-
-
+    // Define Useful variables (time_delta, ImGui elements, etc... )
     auto t_start = std::chrono::high_resolution_clock::now();
-
-    shaders.Activate();
-
     float speed = 1.0;
     ImVec4 clear_color = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+    ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+    ImVec4 scale = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+    ImVec4 translate = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
 
+
+    // Define Stuff for ImPlot widget
     std::vector<float> y_data(255, 0);
     std::vector<float> x_data(100);
     std::iota(x_data.begin(), x_data.end(), 0);
@@ -177,46 +152,53 @@ int main() {
         auto t_now = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
 
+        // Polling & Updating Elements
+        glfwPollEvents();
+        DoMovement( );
         processInput(window);
 
         // Background Fill Color
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear( GL_COLOR_BUFFER_BIT);
 
+        // ImGUI Declaration
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Draw Shapes
-        glm::mat4 transform(1.0f);
-        transform = glm::rotate(transform, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
-        transform = glm::scale(transform, glm::vec3(cos(time * speed)));
-        shaders.SetMat4("transform", transform);
-        // Issue Draw call on the buffer
-        // vao.bind();
-        glBindVertexArray(VAO);
-        // glDrawArrays(GL_TRIANGLES, 0, 6);
-        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+
+        // Draw Models
+        glm::mat4 model(1.0f);
+        // model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, glm::vec3(abs(sin(time * speed))));
+        glm::mat4 projection = glm::perspective( camera.GetZoom( ), ( float )width/( float )height, 0.1f, 100.0f );
+        glm::mat4 view = camera.GetViewMatrix( );
+
+        modelshader.Activate();
+
+        modelshader.SetMat4("model", model);
+        modelshader.SetMat4("view", view);
+        modelshader.SetMat4("projection", projection);
+        nanosuit_model.Draw(modelshader);
 
 
-        glm::mat4 transform2(1.0f);
-        transform2 = glm::rotate(transform2, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
-        transform2 = glm::scale(transform2, glm::vec3(sin(time * speed)));
-        shaders.SetMat4("transform", transform2);
-        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, (void*)(3 * sizeof(float)));
-
-        ImGui::Begin("Window");
-        ImGui::Text("ImGui Window");
-        ImGui::SliderFloat("Change speed", &speed, 0.0f, 10.0f);
-        ImGui::Button("Toggle Draw | Explore");
-        ImGui::ColorEdit3("clear color", (float*)&clear_color);
-        ImGui::End();
-
+        // Recompute certains components
         for (int i = 0; i < y_data.size(); i++)
         {
             y_data[i] = (sin(clear_color.x * x_data[i]) + cos(clear_color.y * x_data[i])) * cos(time) * speed;
         }
 
+
+        // Render Imgui and Implot Widgets
+        ImGui::Begin("Window");
+        ImGui::Text("ImGui Window");
+        ImGui::SliderFloat("Change speed", &speed, 0.0f, 10.0f);
+        ImGui::Button("Toggle Draw | Explore");
+        ImGui::ColorEdit3("clear color", (float*)&clear_color);
+        ImGui::ColorEdit3("scale", (float*)&scale);
+        ImGui::ColorEdit3("translate", (float*)&translate);
+        ImGui::ColorEdit3("mcolor", (float*)&mcolor);
+        ImGui::End();
 
         ImGui::Begin("My Window");
         if (ImPlot::BeginPlot("My Plot")) {
@@ -230,9 +212,9 @@ int main() {
 
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
-        glfwPollEvents();
     }   
-    shaders.Delete();
+    // shaders.Delete();
+    modelshader.Delete();
 
 
     ImGui_ImplOpenGL3_Shutdown();
@@ -260,4 +242,76 @@ void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+}
+
+
+// Moves/alters the camera positions based on user input
+void DoMovement( )
+{
+    // Camera controls
+    if ( keys[GLFW_KEY_W] || keys[GLFW_KEY_UP] )
+    {
+        camera.ProcessKeyboard( FORWARD, deltaTime );
+    }
+
+    if ( keys[GLFW_KEY_S] || keys[GLFW_KEY_DOWN] )
+    {
+        camera.ProcessKeyboard( BACKWARD, deltaTime );
+    }
+
+    if ( keys[GLFW_KEY_A] || keys[GLFW_KEY_LEFT] )
+    {
+        camera.ProcessKeyboard( LEFT, deltaTime );
+    }
+
+    if ( keys[GLFW_KEY_D] || keys[GLFW_KEY_RIGHT] )
+    {
+        camera.ProcessKeyboard( RIGHT, deltaTime );
+    }
+}
+
+// Is called whenever a key is pressed/released via GLFW
+void KeyCallback( GLFWwindow *window, int key, int scancode, int action, int mode )
+{
+    if ( GLFW_KEY_ESCAPE == key && GLFW_PRESS == action )
+    {
+        glfwSetWindowShouldClose(window, GL_TRUE);
+    }
+
+    if ( key >= 0 && key < 1024 )
+    {
+        if ( action == GLFW_PRESS )
+        {
+            keys[key] = true;
+        }
+        else if ( action == GLFW_RELEASE )
+        {
+            keys[key] = false;
+        }
+    }
+
+    if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_PRESS)
+        active_mouse = true;
+    else
+        active_mouse = false;
+}
+
+void MouseCallback( GLFWwindow *window, double xPos, double yPos )
+{
+    if (active_mouse) {
+        if (firstMouse) {
+            lastX = xPos;
+            lastY = yPos;
+            firstMouse = false;
+        }
+
+        GLfloat xOffset = xPos - lastX;
+        GLfloat yOffset = lastY - yPos;
+
+        lastX = xPos;
+        lastY = yPos;
+
+
+        camera.ProcessMouseMovement(xOffset, yOffset);
+    }
 }

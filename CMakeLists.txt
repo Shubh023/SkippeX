@@ -57,11 +57,10 @@ file(GLOB PROJECT_HEADERS SkippeX/Headers/*.hpp
 
 file(GLOB PROJECT_SOURCES SkippeX/Sources/*.cpp)
 
-file(GLOB PROJECT_SHADERS SkippeX/Shaders/*.comp
-                          SkippeX/Shaders/*.frag
-                          SkippeX/Shaders/*.geom
-                          SkippeX/Shaders/*.vert)
-                          
+file(GLOB PROJECT_SHADERS SkippeX/Shaders/*)
+
+file(GLOB PROJECT_MODELS SkippeX/Models/*)
+
 file(GLOB PROJECT_CONFIGS CMakeLists.txt
                           Readme.md
                          .gitattributes
@@ -70,14 +69,16 @@ file(GLOB PROJECT_CONFIGS CMakeLists.txt
 
 source_group("Headers" FILES ${PROJECT_HEADERS})
 source_group("Shaders" FILES ${PROJECT_SHADERS})
+source_group("Models" FILES  ${PROJECT_MODELS})
 source_group("Sources" FILES ${PROJECT_SOURCES})
 source_group("Vendors" FILES ${VENDORS_SOURCES})
 
 add_definitions(-DGLFW_INCLUDE_NONE
                 -DPROJECT_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\")
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${PROJECT_HEADERS}
-                               ${PROJECT_SHADERS} ${PROJECT_CONFIGS}
-                               ${VENDORS_SOURCES})
+                               ${PROJECT_SHADERS} ${PROJECT_MODELS}
+                               ${PROJECT_CONFIGS} ${VENDORS_SOURCES})
+
 target_link_libraries(${PROJECT_NAME} assimp glfw
                       ${GLFW_LIBRARIES}
         BulletDynamics BulletCollision LinearMath)
@@ -87,5 +88,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 add_custom_command(
     TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/SkippeX/Shaders $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/SkippeX/Shaders  $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/SkippeX/Models   $<TARGET_FILE_DIR:${PROJECT_NAME}>
     DEPENDS ${PROJECT_SHADERS})

@@ -17,7 +17,7 @@ std::string readFile(const char* filename) {
 
 Shader::Shader(GLenum _type, const char* _file) :
     file(_file), type(_type) 
-{};
+{}
 
 Shader Shader::Compile() {
 
@@ -69,7 +69,7 @@ void Shader::Delete() {
 
 LinkedShader::LinkedShader(std::vector<shader> _shaders) : 
     shaders(_shaders)
-{};
+{}
 
 LinkedShader LinkedShader::Compile() {
 
