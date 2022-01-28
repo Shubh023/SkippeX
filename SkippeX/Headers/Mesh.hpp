@@ -69,7 +69,6 @@ public:
             glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
         }
 
-        glUniform1f(glGetUniformLocation(shader.ID, "material.shininess"), 15.0f);
         glBindVertexArray(this->VAO);
         glDrawElements(GL_TRIANGLES, this->indices.size(), GL_UNSIGNED_INT, 0);
 

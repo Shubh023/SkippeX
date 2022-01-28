@@ -34,8 +34,8 @@
 #define VSYNC GL_TRUE
 #define FULLSCREEN GL_FALSE
 #define RESIZABLE GL_TRUE
-int width = 800;
-int height = 600;
+int width = 1920;
+int height = 1080;
 
 
 // Global GLFW Window
@@ -49,19 +49,12 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 
 // Function prototypes
-void KeyCallback( GLFWwindow *window, int key, int scancode, int action, int mode );
-void MouseCallback( GLFWwindow *window, double xPos, double yPos );
-void DoMovement( );
+void input(Camera& camera);
+void glClearError();
+void glCheckError(const char* s);
 
-// Camera
-Camera camera( glm::vec3( 0.0f, 0.0f, 3.0f ) );
-bool keys[1024];
-GLfloat lastX = 400, lastY = 300;
-bool firstMouse = true;
+// States
 bool active_mouse = false;
-
-GLfloat deltaTime = 0.0f;
-GLfloat lastFrame = 0.0f;
 
 int main() {
 
@@ -72,8 +65,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
@@ -107,11 +100,15 @@ int main() {
     // Setting up Callbacks
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetErrorCallback(error_callback);
-    glfwSetKeyCallback( window, KeyCallback );
-    glfwSetCursorPosCallback( window, MouseCallback );
 
     // Enable or Disable VSYNC
     glfwSwapInterval(VSYNC);
+
+    // Enable DEPTH
+    glEnable( GL_DEPTH_TEST );
+    glDepthMask(GL_TRUE);
+
+
 
     // IMGUI Stuff
     IMGUI_CHECKVERSION();
@@ -120,31 +117,36 @@ int main() {
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 460");
+    ImGui_ImplOpenGL3_Init("#version 330");
 
+    // Define Camera
+    Camera camera(width, height, glm::vec3(0.0f, 7.5f, 20.f), 0.45, 65.f);
 
     // Define Shaders
     LinkedShader modelshader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
                                                    shader(GL_FRAGMENT_SHADER, "model.frag") }));
     modelshader.Compile();
 
-
     // Define Models
-    Model nanosuit_model("nanosuit/nanosuit.obj");
+    // Model nanosuit_model("nanosuit/nanosuit.obj");
+    Model nanosuit_model("uvsphere/uvsphere.obj");
+
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto t_start = std::chrono::high_resolution_clock::now();
-    float speed = 1.0;
+    float speed = 1.0f;
+    float scale = 1.0f;
     ImVec4 clear_color = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
-    ImVec4 scale = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
-    ImVec4 translate = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
-
+    glm::vec3 translate(0.0f, -0.5, 0);
 
     // Define Stuff for ImPlot widget
-    std::vector<float> y_data(255, 0);
-    std::vector<float> x_data(100);
-    std::iota(x_data.begin(), x_data.end(), 0);
+    std::vector<float> x_data(100, 0);
+    std::vector<float> y_data(100, 0);
+    std::vector<float> z_data(100, 0);
+    std::vector<float> t_data(100, 100);
+    std::iota(t_data.begin(), t_data.end(), 0);
+
 
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
@@ -154,55 +156,74 @@ int main() {
 
         // Polling & Updating Elements
         glfwPollEvents();
-        DoMovement( );
-        processInput(window);
+        input(camera);
+        if (active_mouse != 0)
+            camera.movements(window);
+        camera.update(55.0f, 0.01f, 1000.0f);
 
         // Background Fill Color
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-        glClear( GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // ImGUI Declaration
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        glClearError();
 
         // Draw Models
         glm::mat4 model(1.0f);
-        // model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
-        model = glm::scale(model, glm::vec3(abs(sin(time * speed))));
-        glm::mat4 projection = glm::perspective( camera.GetZoom( ), ( float )width/( float )height, 0.1f, 100.0f );
-        glm::mat4 view = camera.GetViewMatrix( );
+        model = glm::translate(model, glm::vec3(translate.x, translate.y, translate.z));
+        model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(scale));
 
         modelshader.Activate();
 
+        glCheckError("modelshader.Activate();");
+        glClearError();
+
         modelshader.SetMat4("model", model);
-        modelshader.SetMat4("view", view);
-        modelshader.SetMat4("projection", projection);
+        modelshader.SetMat4("projection_view", camera.CM);
         nanosuit_model.Draw(modelshader);
+        glCheckError("nanosuit_model.Draw");
+        glClearError();
 
+        // std::cout << camera.O.x << " " << camera.O.y << " " << camera.O.z << std::endl;
 
-        // Recompute certains components
-        for (int i = 0; i < y_data.size(); i++)
-        {
-            y_data[i] = (sin(clear_color.x * x_data[i]) + cos(clear_color.y * x_data[i])) * cos(time) * speed;
-        }
+        std::reverse(x_data.begin(),x_data.end()); // first becomes last, reverses the vector
+        x_data.pop_back();
+        std::reverse(x_data.begin(),x_data.end());
+        x_data.push_back(translate.x);
+
+        std::reverse(y_data.begin(),y_data.end()); // first becomes last, reverses the vector
+        y_data.pop_back();
+        std::reverse(y_data.begin(),y_data.end());
+        y_data.push_back(translate.y);
+
+        std::reverse(z_data.begin(),z_data.end()); // first becomes last, reverses the vector
+        z_data.pop_back();
+        std::reverse(z_data.begin(),z_data.end());
+        z_data.push_back(translate.z);
 
 
         // Render Imgui and Implot Widgets
         ImGui::Begin("Window");
         ImGui::Text("ImGui Window");
         ImGui::SliderFloat("Change speed", &speed, 0.0f, 10.0f);
-        ImGui::Button("Toggle Draw | Explore");
+        ImGui::SliderFloat("Change scale", &scale, 0.0f, 1.0f);
+
+        // ImGui::Button("Toggle Draw | Explore");
         ImGui::ColorEdit3("clear color", (float*)&clear_color);
-        ImGui::ColorEdit3("scale", (float*)&scale);
-        ImGui::ColorEdit3("translate", (float*)&translate);
+        ImGui::SliderFloat3("translate", &translate[0], -10, 10);
         ImGui::ColorEdit3("mcolor", (float*)&mcolor);
         ImGui::End();
 
         ImGui::Begin("My Window");
         if (ImPlot::BeginPlot("My Plot")) {
-            ImPlot::PlotLine("My Line Plot", &x_data[0], &y_data[0], x_data.size());
+            ImPlot::PlotLine("My Line 1", &t_data[0], &x_data[0], x_data.size());
+            ImPlot::PlotLine("My Line 2", &t_data[0], &y_data[0], y_data.size());
+            ImPlot::PlotLine("My Line 3", &t_data[0], &z_data[0], z_data.size());
             ImPlot::EndPlot();
         }
         ImGui::End();
@@ -210,6 +231,9 @@ int main() {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+
+        glCheckError("Before Swap");
+        glClearError();
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
     }   
@@ -227,7 +251,6 @@ int main() {
     exit(EXIT_SUCCESS);
 }
 
-
 // Callbacks
 static void error_callback(int error, const char* description)
 {
@@ -238,80 +261,28 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow* window)
-{
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-}
 
-
-// Moves/alters the camera positions based on user input
-void DoMovement( )
-{
-    // Camera controls
-    if ( keys[GLFW_KEY_W] || keys[GLFW_KEY_UP] )
-    {
-        camera.ProcessKeyboard( FORWARD, deltaTime );
+void input(Camera& camera) {
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, 1);
     }
 
-    if ( keys[GLFW_KEY_S] || keys[GLFW_KEY_DOWN] )
-    {
-        camera.ProcessKeyboard( BACKWARD, deltaTime );
-    }
-
-    if ( keys[GLFW_KEY_A] || keys[GLFW_KEY_LEFT] )
-    {
-        camera.ProcessKeyboard( LEFT, deltaTime );
-    }
-
-    if ( keys[GLFW_KEY_D] || keys[GLFW_KEY_RIGHT] )
-    {
-        camera.ProcessKeyboard( RIGHT, deltaTime );
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
+            active_mouse = !active_mouse;
+            std::cout << active_mouse << std::endl;
+        }
     }
 }
 
-// Is called whenever a key is pressed/released via GLFW
-void KeyCallback( GLFWwindow *window, int key, int scancode, int action, int mode )
+void glClearError()
 {
-    if ( GLFW_KEY_ESCAPE == key && GLFW_PRESS == action )
-    {
-        glfwSetWindowShouldClose(window, GL_TRUE);
-    }
-
-    if ( key >= 0 && key < 1024 )
-    {
-        if ( action == GLFW_PRESS )
-        {
-            keys[key] = true;
-        }
-        else if ( action == GLFW_RELEASE )
-        {
-            keys[key] = false;
-        }
-    }
-
-    if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_PRESS)
-        active_mouse = true;
-    else
-        active_mouse = false;
+    while (glGetError() != GL_NO_ERROR);
 }
 
-void MouseCallback( GLFWwindow *window, double xPos, double yPos )
+void glCheckError(const char* s)
 {
-    if (active_mouse) {
-        if (firstMouse) {
-            lastX = xPos;
-            lastY = yPos;
-            firstMouse = false;
-        }
-
-        GLfloat xOffset = xPos - lastX;
-        GLfloat yOffset = lastY - yPos;
-
-        lastX = xPos;
-        lastY = yPos;
-
-
-        camera.ProcessMouseMovement(xOffset, yOffset);
-    }
+    while (GLenum error = glGetError())
+        std::cout << "Opengl error : (" << error << ")" << " at " << s << std::endl;
+    glClearError();
 }
