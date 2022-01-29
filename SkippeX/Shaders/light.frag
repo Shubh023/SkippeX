@@ -8,9 +8,9 @@ out vec4 color;
 
 uniform sampler2D texture_diffuse;
 uniform vec4 lightColor;
-uniform vec4 lightIntensity;
+uniform float lightIntensity;
 
 void main( )
 {
-	color = normalize(lightColor * lightIntensity);
+	color = lightColor;
 }

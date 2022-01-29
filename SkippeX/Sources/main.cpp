@@ -158,7 +158,7 @@ int main() {
 
     // Lighting Variables
     glm::vec4 lightColor = glm::vec4(1.0f);
-    glm::vec3 lightPos = glm::vec3(camera.P);
+    glm::vec3 lightPos = glm::vec3(0.0f, 5.0f, 2.0f);
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
@@ -174,8 +174,8 @@ int main() {
         if (active_mouse != 0)
             camera.movements(window);
         camera.update(55.0f, 0.01f, 1000.0f);
-        lightPos = camera.P;
         /*
+        lightPos = camera.P;
         lightPos.x = radius * cos(time * speed);
         lightPos.z = radius * sin(time * speed);
         lightPos.y = rheight * (time * speed);
