@@ -136,7 +136,7 @@ int main() {
     uvsphere_shader.Compile();
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
-    Model nanosuit_model("nanosuit/nanosuit.obj");
+    Model nanosuit_model("nanosuit/nanosuit.blend");
     Model plane("CuriosityQR/CuriosityQR.stl");
     Model uv_sphere("uvsphere/uvsphere.obj");
 

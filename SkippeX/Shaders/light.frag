@@ -12,10 +12,5 @@ uniform float lightIntensity;
 
 void main( )
 {
-	float ambient_light = 0.2f;
-	vec3 normal = normalize(Normal);
-	vec3 lightDirection = normalize(lightPos - FragPos);
-
-	float diffuse = lightIntensity * max(dot(normal, lightDirection), 0.0f);
-	color = lightColor * (diffuse + ambient_light);
+	color = lightColor;
 }
