@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 
 in vec2 TexCoords;
 in vec3 Normal;
@@ -13,12 +13,10 @@ uniform vec3 lightPos;
 
 void main( )
 {
-
 	float ambient_light = 0.2f;
 	vec3 normal = normalize(Normal);
 	vec3 lightDirection = normalize(lightPos - FragPos);
 
 	float diffuse = lightIntensity * max(dot(normal, lightDirection), 0.0f);
-
-	color = normalize(texture( texture_diffuse, TexCoords)) * normalize(lightColor) * (diffuse + ambient_light);
+	color = texture(texture_diffuse, TexCoords) * lightColor * (diffuse + ambient_light);
 }

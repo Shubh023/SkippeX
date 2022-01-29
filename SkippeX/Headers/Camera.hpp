@@ -222,16 +222,16 @@ void Camera::movements(GLFWwindow *window) {
         P += speed * -O ;
     // MOVE LEFT
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS or glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-        P += speed * -glm::normalize(glm::cross(O , U));
+        P += speed * -glm::normalize(glm::cross(O , U)) * 0.40f;
     // MOVE RIGHT
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS or glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-        P += speed * glm::normalize(glm::cross(O , U));
+        P += speed * glm::normalize(glm::cross(O , U)) * 0.40f;
     // MOVE UP
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        P += speed * U;
+        P += speed * U * 0.35f;
     // MOVE DOWN
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-        P += speed * -U;
+        P += speed * -U * 0.35f;
 
     // ROTATE CAMERA with mouse
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
