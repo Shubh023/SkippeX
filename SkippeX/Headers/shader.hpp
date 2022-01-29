@@ -39,7 +39,8 @@ public:
     void Delete();
     void SetMat4(const std::string& name, glm::mat4 value);
     void SetVec3(const std::string& name, glm::vec3 value);
-    void SetUniform(const std::string& name);
+    void SetVec4(const std::string& name, glm::vec4 value);
+    void SetFloat(const std::string& name, float value);
 
 private:
     std::vector<shader> shaders; 

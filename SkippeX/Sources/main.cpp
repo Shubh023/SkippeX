@@ -123,20 +123,28 @@ int main() {
     Camera camera(width, height, glm::vec3(0.0f, 7.5f, 20.f), 0.45, 65.f);
 
     // Define Shaders
-    LinkedShader modelshader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
+    LinkedShader nanosuit_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
                                                    shader(GL_FRAGMENT_SHADER, "model.frag") }));
-    modelshader.Compile();
+    nanosuit_shader.Compile();
+
+    LinkedShader uvsphere_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "light.vert"),
+                                                       shader(GL_FRAGMENT_SHADER, "light.frag") }));
+    uvsphere_shader.Compile();
 
     // Define Models
-    // Model nanosuit_model("nanosuit/nanosuit.obj");
-    Model nanosuit_model("uvsphere/uvsphere.obj");
+    Model nanosuit_model("nanosuit/nanosuit.obj");
+    Model uv_sphere("uvsphere/uvsphere.obj");
 
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto t_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
-    float scale = 1.0f;
-    ImVec4 clear_color = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+    float mscale = 1.0f;
+    float lscale = 0.2f;
+    float radius = 10.0f;
+    float rheight = 0.05f;
+    float lightIntensity = 1.0f;
+    ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
     glm::vec3 translate(0.0f, -0.5, 0);
 
@@ -147,6 +155,12 @@ int main() {
     std::vector<float> t_data(100, 100);
     std::iota(t_data.begin(), t_data.end(), 0);
 
+
+    // Lighting Variables
+    glm::vec4 lightColor = glm::vec4(1.0f);
+    glm::vec3 lightPos = glm::vec3(camera.P);
+    glm::mat4 lightModel = glm::mat4(1.0f);
+    lightModel = glm::translate(lightModel, lightPos);
 
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
@@ -160,6 +174,12 @@ int main() {
         if (active_mouse != 0)
             camera.movements(window);
         camera.update(55.0f, 0.01f, 1000.0f);
+        lightPos = camera.P;
+        /*
+        lightPos.x = radius * cos(time * speed);
+        lightPos.z = radius * sin(time * speed);
+        lightPos.y = rheight * (time * speed);
+        */
 
         // Background Fill Color
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
@@ -172,20 +192,52 @@ int main() {
 
         glClearError();
 
-        // Draw Models
+        /** Draw Models **/
+        // Drawing UV_Sphere as a light
+        glm::mat4 sphere_model(1.0f);
+        sphere_model = glm::translate(sphere_model, glm::vec3(lightPos.x, lightPos.y, lightPos.z));
+        //sphere_model = glm::rotate(sphere_model, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
+        sphere_model = glm::scale(sphere_model, glm::vec3(lscale));
+
+        uvsphere_shader.Activate();
+
+        glCheckError("uvsphere_shader.Activate();");
+        glClearError();
+
+        // Settings Light uniforms
+        uvsphere_shader.SetVec3("lightPos", lightPos);
+        uvsphere_shader.SetVec4("lightColor", lightColor);
+        uvsphere_shader.SetFloat("lightIntensity", lightIntensity);
+
+        // Settings Model uniforms
+        uvsphere_shader.SetMat4("model", sphere_model);
+        uvsphere_shader.SetMat4("projection_view", camera.CM);
+        uv_sphere.Draw(uvsphere_shader);
+        glCheckError("uvsphere_shader.Draw");
+        glClearError();
+
+        // Drawing Nanosuit Model
+
         glm::mat4 model(1.0f);
         model = glm::translate(model, glm::vec3(translate.x, translate.y, translate.z));
-        model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(scale));
+        // model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(mscale));
 
-        modelshader.Activate();
+        nanosuit_shader.Activate();
 
         glCheckError("modelshader.Activate();");
         glClearError();
 
-        modelshader.SetMat4("model", model);
-        modelshader.SetMat4("projection_view", camera.CM);
-        nanosuit_model.Draw(modelshader);
+        // Settings Light uniforms
+        nanosuit_shader.SetVec3("lightPos", lightPos);
+        nanosuit_shader.SetVec4("lightColor", lightColor);
+        nanosuit_shader.SetFloat("lightIntensity", lightIntensity);
+
+
+        // Settings Model uniforms
+        nanosuit_shader.SetMat4("model", model);
+        nanosuit_shader.SetMat4("projection_view", camera.CM);
+        nanosuit_model.Draw(nanosuit_shader);
         glCheckError("nanosuit_model.Draw");
         glClearError();
 
@@ -194,29 +246,34 @@ int main() {
         std::reverse(x_data.begin(),x_data.end()); // first becomes last, reverses the vector
         x_data.pop_back();
         std::reverse(x_data.begin(),x_data.end());
-        x_data.push_back(translate.x);
+        x_data.push_back(lightPos.x);
 
         std::reverse(y_data.begin(),y_data.end()); // first becomes last, reverses the vector
         y_data.pop_back();
         std::reverse(y_data.begin(),y_data.end());
-        y_data.push_back(translate.y);
+        y_data.push_back(lightPos.y);
 
         std::reverse(z_data.begin(),z_data.end()); // first becomes last, reverses the vector
         z_data.pop_back();
         std::reverse(z_data.begin(),z_data.end());
-        z_data.push_back(translate.z);
+        z_data.push_back(lightPos.z);
 
 
         // Render Imgui and Implot Widgets
         ImGui::Begin("Window");
         ImGui::Text("ImGui Window");
         ImGui::SliderFloat("Change speed", &speed, 0.0f, 10.0f);
-        ImGui::SliderFloat("Change scale", &scale, 0.0f, 1.0f);
+        ImGui::SliderFloat("Change model scale", &mscale, 0.0f, 1.0f);
+        ImGui::SliderFloat("Change light scale", &lscale, 0.0f, 1.0f);
+        ImGui::SliderFloat("Change light intensity", &lightIntensity, 0.0f, 100.0f);
+        ImGui::SliderFloat("Change Radius", &radius, 0.0f, 15.0f);
+        ImGui::SliderFloat("Change height", &rheight, 0.0f, 1.0f);
 
         // ImGui::Button("Toggle Draw | Explore");
         ImGui::ColorEdit3("clear color", (float*)&clear_color);
         ImGui::SliderFloat3("translate", &translate[0], -10, 10);
-        ImGui::ColorEdit3("mcolor", (float*)&mcolor);
+        // ImGui::SliderFloat3("lightPos", &lightPos[0], -20, 20);
+        ImGui::ColorEdit3("Light color", (float*)&lightColor);
         ImGui::End();
 
         ImGui::Begin("My Window");
@@ -238,7 +295,8 @@ int main() {
         glfwSwapBuffers(window);
     }   
     // shaders.Delete();
-    modelshader.Delete();
+    nanosuit_shader.Delete();
+    uvsphere_shader.Delete();
 
 
     ImGui_ImplOpenGL3_Shutdown();
