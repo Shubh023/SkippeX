@@ -37,6 +37,8 @@
 int width = 1920;
 int height = 1080;
 float zoom = 45.f;
+#define DAY 1
+#define ENABLE_SKYBOX 1
 
 // Global GLFW Window
 GLFWwindow* window;
@@ -127,31 +129,33 @@ int main() {
                                                    shader(GL_FRAGMENT_SHADER, "model.frag") }));
     nanosuit_shader.Compile();
 
-    LinkedShader plane_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "light.vert"),
-                                                       shader(GL_FRAGMENT_SHADER, "light.frag") }));
+    LinkedShader plane_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
+                                                       shader(GL_FRAGMENT_SHADER, "model.frag") }));
     plane_shader.Compile();
 
     LinkedShader uvsphere_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "light.vert"),
                                                        shader(GL_FRAGMENT_SHADER, "light.frag") }));
     uvsphere_shader.Compile();
 
-    // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
-    Model nanosuit_model("nanosuit/nanosuit.blend");
-    Model plane("CuriosityQR/CuriosityQR.stl");
-    Model uv_sphere("uvsphere/uvsphere.obj");
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto t_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
     float mscale = 1.0f;
     float lscale = 0.2f;
-    float plscale = 0.25f;
+    float plscale = 0.55f;
     float radius = 10.0f;
     float rheight = 0.05f;
     float lightIntensity = 1.0f;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
-    glm::vec3 translate(0.0f, -0.5, 0);
+
+    // Plane Variables
+    glm::vec4 planeColor = glm::vec4(1.0f);
+    glm::vec3 planePos = glm::vec3(0.0f, 2.0f, 0.0f);
+    glm::mat4 plane_model = glm::mat4(1.0f);
+    glm::vec3 rotate_plane(0.f, 0.f, 0.f);
+    plane_model = glm::translate(plane_model, planePos);
 
     // Define Stuff for ImPlot widget
     std::vector<float> x_data(100, 0);
@@ -160,20 +164,21 @@ int main() {
     std::vector<float> t_data(100, 100);
     std::iota(t_data.begin(), t_data.end(), 0);
 
-
     // Lighting Variables
     glm::vec4 lightColor = glm::vec4(1.0f);
-    glm::vec3 lightPos = glm::vec3(0.0f, 5.0f, 2.0f);
+    glm::vec3 lightPos = glm::vec3(0.0f, 13.0f, 2.0f);
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
-    // Plane Variables
-    glm::vec4 planeColor = glm::vec4(1.0f);
-    glm::vec3 planePos = glm::vec3(20.0f, -25.0f, -15.0f);
-    glm::mat4 plane_model = glm::mat4(1.0f);
-    glm::vec3 rotate_plane(270.f, 0.f, 0.f);
-    plane_model = glm::translate(plane_model, planePos);
+    // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
+    Model nanosuit_model(glm::vec3(0.0f, -0.5, 0), glm::vec3(mscale), false);
+    nanosuit_model.loadModel("nanosuit/nanosuit.obj");
 
+    Model plane(planePos, glm::vec3(plscale), true);
+    plane.loadModel("sphere/scene.gltf");
+
+    Model uv_sphere(lightPos, glm::vec3(lscale), true);
+    uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
@@ -211,7 +216,7 @@ int main() {
         /** Draw Models **/
         // Drawing UV_Sphere as a light
         glm::mat4 plane_model(1.0f);
-        plane_model = glm::translate(plane_model, glm::vec3(planePos.x, planePos.y, planePos.z));
+        plane_model = glm::translate(plane_model, plane.pos);
         plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.x), glm::vec3(1.0f, 0.0f, 0.0f));
         plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.y), glm::vec3(0.0f, 1.0f, 0.0f));
         plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.z), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -224,12 +229,14 @@ int main() {
 
         // Settings Light uniforms
         plane_shader.SetVec3("lightPos", lightPos);
-        plane_shader.SetVec4("lightColor", planeColor);
+        plane_shader.SetVec4("lightColor", lightColor);
         plane_shader.SetFloat("lightIntensity", lightIntensity);
 
         // Settings Model uniforms
         plane_shader.SetMat4("model", plane_model);
-        plane_shader.SetMat4("projection_view", camera.CM);
+        plane_shader.SetMat4("view", camera.view);
+        plane_shader.SetMat4("projection", camera.projection);
+        plane_shader.SetVec4("Ucolor", planeColor);
         plane.Draw(plane_shader);
         glCheckError("plane_shader.Draw");
         glClearError();
@@ -252,14 +259,15 @@ int main() {
 
         // Settings Model uniforms
         uvsphere_shader.SetMat4("model", lightModel);
-        uvsphere_shader.SetMat4("projection_view", camera.CM);
+        uvsphere_shader.SetMat4("view", camera.view);
+        uvsphere_shader.SetMat4("projection", camera.projection);
         uv_sphere.Draw(uvsphere_shader);
         glCheckError("uvsphere_shader.Draw");
         glClearError();
 
         // Drawing Nanosuit Model
         glm::mat4 model(1.0f);
-        model = glm::translate(model, glm::vec3(translate.x, translate.y, translate.z));
+        model = glm::translate(model, nanosuit_model.pos);
         // model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::scale(model, glm::vec3(mscale));
 
@@ -274,9 +282,12 @@ int main() {
         nanosuit_shader.SetFloat("lightIntensity", lightIntensity);
 
 
+
         // Settings Model uniforms
         nanosuit_shader.SetMat4("model", model);
-        nanosuit_shader.SetMat4("projection_view", camera.CM);
+        nanosuit_shader.SetMat4("view", camera.view);
+        nanosuit_shader.SetMat4("projection", camera.projection);
+        nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
         nanosuit_model.Draw(nanosuit_shader);
         glCheckError("nanosuit_model.Draw");
         glClearError();
@@ -318,7 +329,7 @@ int main() {
         ImGui::Begin("Plane Settings");
         ImGui::Text("Plane Settings");
         ImGui::SliderFloat("scale", &plscale, 0.0f, 1.0f);
-        ImGui::SliderFloat3("position", &planePos[0], -100, 100);
+        ImGui::SliderFloat3("position", &plane.pos[0], -100, 100);
         ImGui::SliderFloat3("rotate", &rotate_plane[0], 0, 360);
         ImGui::ColorEdit3("color", (float*)&planeColor);
         ImGui::End();
@@ -326,7 +337,7 @@ int main() {
 
         ImGui::Begin("Selected Model settings");
         ImGui::Text("model settings");
-        ImGui::SliderFloat3("position", &translate[0], -100, 100);
+        ImGui::SliderFloat3("position", &nanosuit_model.pos[0], -100, 100);
         ImGui::SliderFloat("scale", &mscale, 0.0f, 5.0f);
         ImGui::End();
 
@@ -366,6 +377,9 @@ int main() {
     nanosuit_shader.Delete();
     uvsphere_shader.Delete();
     plane_shader.Delete();
+    plane.Delete();
+    nanosuit_model.Delete();
+    uv_sphere.Delete();
 
 
     ImGui_ImplOpenGL3_Shutdown();

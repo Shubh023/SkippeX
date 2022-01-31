@@ -41,8 +41,7 @@ public:
     void SetVec3(const std::string& name, glm::vec3 value);
     void SetVec4(const std::string& name, glm::vec4 value);
     void SetFloat(const std::string& name, float value);
-    void SetBool(const std::string& name, float value);
-    void SetNoTexCoords(float value);
+    void SetInt(const std::string& name, int value);
 
 
 private:
