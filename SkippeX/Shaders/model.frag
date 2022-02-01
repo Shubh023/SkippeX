@@ -18,19 +18,38 @@ in vec4 FragColor;
 out vec4 color;
 
 uniform vec4 lightColor;
-uniform float lightIntensity;
+uniform float ambientStrength;
+uniform float specularStrength;
+uniform float fadeOff;
 uniform vec3 lightPos;
+uniform vec3 cameraPos;
 uniform vec4 Ucolor;
 uniform Material material;
 uniform int noTex;
 
 void main()
 {
-	float ambient_light = 0.2f;
-	vec3 normal = normalize(Normal);
-	vec3 lightDirection = normalize(lightPos - FragPos);
 
-	float diffuse = lightIntensity * max(dot(normal, lightDirection), 0.0f);
+    float dist = (1.0f / fadeOff) * length(lightPos - FragPos);
+    float a = 5.0;
+    float b = 1.0;
+    float intensity = 1.0f / (a * dist * dist + b * dist + 1.0f);
+
+    // Ambient
+    vec4 ambient = ambientStrength * lightColor;
+
+    // Diffuse
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diffuseStrength = max(dot(norm, lightDir), 0.0f);
+    vec4 diffuse = diffuseStrength * lightColor;
+
+    // Specular
+
+    vec3 viewDir = normalize(cameraPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 128);
+    vec4 specular = specularStrength * spec * lightColor;
 
     vec4 diffMap;
     vec4 specMap;
@@ -43,5 +62,6 @@ void main()
         specMap = texture(specular0, TexCoords);
     }
 
-    color = diffMap * lightColor * (diffuse + ambient_light);
+    // Combine
+    color = intensity * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
 }

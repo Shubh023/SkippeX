@@ -37,13 +37,20 @@
 int width = 1920;
 int height = 1080;
 float zoom = 45.f;
-#define DAY 1
-#define ENABLE_SKYBOX 1
+unsigned int samples = 8;
+
+float rectangle_vertices[] = {
+        -1.0f,  1.0f,  0.0f, 1.0f,
+        -1.0f, -1.0f,  0.0f, 0.0f,
+        1.0f, -1.0f,  1.0f, 0.0f,
+        -1.0f,  1.0f,  0.0f, 1.0f,
+        1.0f, -1.0f,  1.0f, 0.0f,
+        1.0f,  1.0f,  1.0f, 1.0f
+};
 
 // Global GLFW Window
 GLFWwindow* window;
 GLFWmonitor* monitor;
-
 
 // Callbacks
 static void error_callback(int error, const char* description);
@@ -108,9 +115,13 @@ int main() {
     // Enable or Disable VSYNC
     glfwSwapInterval(VSYNC);
 
-    // Enable DEPTH
-    glEnable( GL_DEPTH_TEST );
-    glDepthMask(GL_TRUE);
+    // Enabling DEPTH
+    // Enable DEPTH_TEST
+    glEnable(GL_DEPTH_TEST);
+    // Enable Multisampling
+    glEnable(GL_MULTISAMPLE);
+    // Enables Gamma Correction
+    // glEnable(GL_FRAMEBUFFER_SRGB);
 
     // IMGUI Stuff
     IMGUI_CHECKVERSION();
@@ -137,16 +148,22 @@ int main() {
                                                        shader(GL_FRAGMENT_SHADER, "light.frag") }));
     uvsphere_shader.Compile();
 
+    LinkedShader framebuffershader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "framebuffer.vert"),
+                                                       shader(GL_FRAGMENT_SHADER, "framebuffer.frag") }));
+    framebuffershader.Compile();
+
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto t_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
     float mscale = 1.0f;
     float lscale = 0.2f;
-    float plscale = 0.55f;
+    float plscale = 0.15f;
     float radius = 10.0f;
     float rheight = 0.05f;
-    float lightIntensity = 1.0f;
+    float ambientStrength = 0.2f;
+    float specularStrength = 0.5f;
+    float fadeOff = 100.0f;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
 
@@ -174,8 +191,8 @@ int main() {
     Model nanosuit_model(glm::vec3(0.0f, -0.5, 0), glm::vec3(mscale), false);
     nanosuit_model.loadModel("nanosuit/nanosuit.obj");
 
-    Model plane(planePos, glm::vec3(plscale), true);
-    plane.loadModel("sphere/scene.gltf");
+    Model plane(planePos, glm::vec3(plscale), false);
+    plane.loadModel("Sponza/Sponza.gltf");
 
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
@@ -194,10 +211,11 @@ int main() {
         camera.update(zoom, 0.01f, 1000.0f);
         /*
         lightPos = camera.P;
+        */
         lightPos.x = radius * cos(time * speed);
         lightPos.z = radius * sin(time * speed);
         lightPos.y = rheight * (time * speed);
-        */
+
 
         // Background Fill Color
         if (active_mouse)
@@ -205,6 +223,7 @@ int main() {
         else
             glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 
         // ImGUI Declaration
         ImGui_ImplOpenGL3_NewFrame();
@@ -230,12 +249,15 @@ int main() {
         // Settings Light uniforms
         plane_shader.SetVec3("lightPos", lightPos);
         plane_shader.SetVec4("lightColor", lightColor);
-        plane_shader.SetFloat("lightIntensity", lightIntensity);
+        plane_shader.SetFloat("ambientStrength", ambientStrength);
+        plane_shader.SetFloat("specularStrength", specularStrength);
+        plane_shader.SetFloat("fadeOff", fadeOff);
 
         // Settings Model uniforms
         plane_shader.SetMat4("model", plane_model);
         plane_shader.SetMat4("view", camera.view);
         plane_shader.SetMat4("projection", camera.projection);
+        plane_shader.SetVec3("cameraPos", camera.P);
         plane_shader.SetVec4("Ucolor", planeColor);
         plane.Draw(plane_shader);
         glCheckError("plane_shader.Draw");
@@ -255,12 +277,15 @@ int main() {
         // Settings Light uniforms
         uvsphere_shader.SetVec3("lightPos", lightPos);
         uvsphere_shader.SetVec4("lightColor", lightColor);
-        uvsphere_shader.SetFloat("lightIntensity", lightIntensity);
+        uvsphere_shader.SetFloat("ambientStrength", ambientStrength);
+        uvsphere_shader.SetFloat("specularStrength", specularStrength);
+        uvsphere_shader.SetFloat("fadeOff", fadeOff);
 
         // Settings Model uniforms
         uvsphere_shader.SetMat4("model", lightModel);
         uvsphere_shader.SetMat4("view", camera.view);
         uvsphere_shader.SetMat4("projection", camera.projection);
+        uvsphere_shader.SetVec3("cameraPos", camera.P);
         uv_sphere.Draw(uvsphere_shader);
         glCheckError("uvsphere_shader.Draw");
         glClearError();
@@ -279,14 +304,15 @@ int main() {
         // Settings Light uniforms
         nanosuit_shader.SetVec3("lightPos", lightPos);
         nanosuit_shader.SetVec4("lightColor", lightColor);
-        nanosuit_shader.SetFloat("lightIntensity", lightIntensity);
-
-
+        nanosuit_shader.SetFloat("ambientStrength", ambientStrength);
+        nanosuit_shader.SetFloat("specularStrength", specularStrength);
+        nanosuit_shader.SetFloat("fadeOff", fadeOff);
 
         // Settings Model uniforms
         nanosuit_shader.SetMat4("model", model);
         nanosuit_shader.SetMat4("view", camera.view);
         nanosuit_shader.SetMat4("projection", camera.projection);
+        nanosuit_shader.SetVec3("cameraPos", camera.P);
         nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
         nanosuit_model.Draw(nanosuit_shader);
         glCheckError("nanosuit_model.Draw");
@@ -309,7 +335,6 @@ int main() {
         std::reverse(z_data.begin(),z_data.end());
         z_data.push_back(lightPos.z);
 
-
         // Render Imgui and Implot Widgets
         ImGui::Begin("Change Light and Background");
         ImGui::Text("Background Settings");
@@ -317,7 +342,9 @@ int main() {
 
         ImGui::Text("Light Settings");
         ImGui::SliderFloat("scale", &lscale, 0.0f, 1.0f);
-        ImGui::SliderFloat("intensity", &lightIntensity, 0.0f, 100.0f);
+        ImGui::SliderFloat("ambientStrength", &ambientStrength, 0.0f, 5.f);
+        ImGui::SliderFloat("specularStrength", &specularStrength, 0.0f, 5.f);
+        ImGui::SliderFloat("fadeOff", &fadeOff, 0.0f, 1000.0f);
         ImGui::SliderFloat3("position", &lightPos[0], -100, 100);
         ImGui::ColorEdit3("color", (float*)&lightColor);
 
@@ -343,7 +370,7 @@ int main() {
 
 
         ImGui::Begin("Camera Settings");
-        ImGui::Text("Light Movement Behaviour");
+        ImGui::Text("Camera");
         ImGui::SliderFloat("sensitivity", &camera.sensitivity, 0.0f, 100.0f);
         ImGui::SliderFloat("speed", &camera.speed, 0.0f, 100.0f);
         ImGui::SliderFloat3("position", &camera.P[0], -50.f, 50.f);
@@ -367,19 +394,19 @@ int main() {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-
         glCheckError("Before Swap");
         glClearError();
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
     }   
-    // shaders.Delete();
     nanosuit_shader.Delete();
     uvsphere_shader.Delete();
     plane_shader.Delete();
+    framebuffershader.Delete();
     plane.Delete();
     nanosuit_model.Delete();
     uv_sphere.Delete();
+
 
 
     ImGui_ImplOpenGL3_Shutdown();

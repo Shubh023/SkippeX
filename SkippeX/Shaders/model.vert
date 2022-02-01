@@ -9,6 +9,7 @@ out vec3 Normal;
 out vec3 FragPos;
 out vec4 FragColor;
 
+uniform vec3 cameraPos;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
@@ -19,7 +20,7 @@ void main( )
 	gl_Position = projection * view * model * vec4( aPos, 1.0f );
 
 	TexCoords = aTexCoord;
-	FragPos = aPos;
+	FragPos = vec3(model * vec4(aPos, 1.0)); // Vertex in world space
 	FragColor = aColor;
-	Normal = aNormal;
+	Normal = inverse(transpose(mat3(model))) * aNormal; // Normal in world space
 }

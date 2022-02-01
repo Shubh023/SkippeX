@@ -44,10 +44,18 @@ public:
         int width;
         int height;
         int channels;
+        // unsigned char* image = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb);
         unsigned char* image = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb);
 
+        GLenum colorMode = GL_RGB;
+
+        if (channels == 1)
+            colorMode == GL_RED;
+        if (channels == 4)
+            colorMode == GL_RGBA;
+
         glBindTexture(GL_TEXTURE_2D, id);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+        glTexImage2D(GL_TEXTURE_2D, 0, colorMode, width, height, 0, colorMode, GL_UNSIGNED_BYTE, image);
         glGenerateMipmap(GL_TEXTURE_2D);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
