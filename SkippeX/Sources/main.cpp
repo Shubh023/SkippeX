@@ -80,6 +80,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
+    glfwWindowHint(GLFW_SAMPLES, samples);
 
     // Setup Monitor to Primary
     monitor = glfwGetPrimaryMonitor();
