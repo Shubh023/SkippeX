@@ -5,12 +5,15 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <assimp/IOStream.hpp>
 #include <assimp/IOSystem.hpp>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <stb_image.h>
+#include <btBulletCollisionCommon.h>
+#include "Camera.hpp"
 
 #include <string>
 #include <fstream>
@@ -21,18 +24,80 @@
 
 using namespace std;
 
+class Ray {
+public:
+    Ray(glm::vec3 o = glm::vec3(0.0f), glm::vec3 d = glm::vec3(0.0f))
+        : origin(o), direction(d)
+    {};
+    glm::vec3 origin;
+    glm::vec3 direction;
+};
 
+class Model;
+
+class World {
+public:
+    std::vector<btRigidBody*> rigidBodies;
+    std::vector<Model*> models;
+    btDiscreteDynamicsWorld* dynamicsWorld;
+    Camera* camera;
+
+    World(Camera* cam) : camera(cam) {
+        btBroadphaseInterface* broadphase = new btDbvtBroadphase();
+        btDefaultCollisionConfiguration* collisionConfiguration = new btDefaultCollisionConfiguration();
+        btCollisionDispatcher* dispatcher = new btCollisionDispatcher(collisionConfiguration);
+        btSequentialImpulseConstraintSolver* solver = new btSequentialImpulseConstraintSolver;
+        dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher,broadphase,solver,collisionConfiguration);
+        dynamicsWorld->setGravity(btVector3(0,-9.81f,0));
+    }
+
+    void addRigidBody(Model& model, btRigidBody* rigidBody) {
+        models.push_back(&model);
+        dynamicsWorld->addRigidBody(rigidBody);
+    }
+
+    void updateWorld();
+
+    bool raycast(const glm::vec3& s, glm::vec3& e, glm::vec3& n) {
+
+        btVector3 Start = btVector3(s[0], s[1], s[2]);
+        btVector3 End = btVector3(e[0], e[1], e[2]);
+        btVector3 Normal = btVector3(n[0], n[1], n[2]);
+        btCollisionWorld::ClosestRayResultCallback RayCallback(Start, End);
+        RayCallback.m_collisionFilterMask = btBroadphaseProxy::DefaultFilter;
+
+        dynamicsWorld->rayTest(Start, End, RayCallback);
+        if(RayCallback.hasHit()) {
+
+            End = RayCallback.m_hitPointWorld;
+            Normal = RayCallback.m_hitNormalWorld;
+            e = glm::vec3(End[0], End[1], End[2]);
+            n = glm::vec3(Normal[0], Normal[1], Normal[2]);
+            return true;
+        }
+        return false;
+    }
+
+    glm::mat4 getWorldTransform(glm::mat4 model) {
+        return camera->projection * camera->view * model;
+    }
+};
 
 class Model {
 public:
-    glm::vec3 pos;
-    glm::vec3 size;
+    glm::vec3 position;
+    glm::vec3 orientation;
+    glm::vec3 scale;
     bool noTex;
+    std::vector<Mesh> meshes;
+    glm::mat4 model;
 
     Model() {};
-    Model(glm::vec3 pos = glm::vec3(0.0f), glm::vec3 size = glm::vec3(1.0f), bool noTex = false)
-        : pos(pos), size(size), noTex(noTex)
-    {};
+    Model(glm::vec3 pos = glm::vec3(0.0f), glm::vec3 scale = glm::vec3(1.0f),  bool noTex = false, glm::mat4 model = glm::mat4(1.0f))
+        : position(pos), scale(scale), noTex(noTex), model(model)
+    {
+        orientation = glm::vec3(0.f);
+    };
 
     void Init() {};
     void loadModel(std::string path) {
@@ -49,7 +114,69 @@ public:
         this->processNode(scene->mRootNode, scene);
     }
 
+    glm::mat4 getModel()
+    {
+        glm::mat4 nModel(1.0f);
+        nModel = glm::translate(nModel, position);
+        nModel = glm::rotate(nModel, glm::radians(orientation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+        nModel = glm::rotate(nModel, glm::radians(orientation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+        nModel = glm::rotate(nModel, glm::radians(orientation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        nModel = glm::scale(nModel, glm::vec3(scale));
+        model = nModel;
+        return glm::mat4(model);
+    }
+    glm::mat4 getModelBullet()
+    {
+        glm::mat4 nModel(1.0f);
+        nModel = glm::translate(nModel, glm::vec3(position.x, position.z, -position.y));
+        nModel = glm::rotate(nModel, glm::radians(orientation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+        nModel = glm::rotate(nModel, glm::radians(orientation.z), glm::vec3(0.0f, 1.0f, 0.0f));
+        nModel = glm::rotate(nModel, glm::radians(orientation.y), glm::vec3(0.0f, 0.0f, -1.0f));
+        return glm::mat4(nModel);
+    }
+
+    void updateModel()
+    {
+        model = getModel();
+    }
+
+    void addRigidBodyToWorld(World& world) {
+        auto worldSpaceTransform = world.getWorldTransform(getModel());
+        btTriangleMesh* triangleMesh = new btTriangleMesh();
+        for (Mesh mesh : meshes) {
+            for (int i = 0; i < mesh.indices.size(); i+=3)
+            {
+                glm::vec3 a = glm::vec3(glm::vec4(mesh.vertices[mesh.indices[i]].Position, 1));
+                glm::vec3 b = glm::vec3(glm::vec4(mesh.vertices[mesh.indices[i + 1]].Position, 1));
+                glm::vec3 c = glm::vec3(glm::vec4(mesh.vertices[mesh.indices[i + 2]].Position, 1));
+                triangleMesh->addTriangle(btVector3(a[0], a[1], a[2]),
+                                          btVector3(b[0], b[1], b[2]),
+                                          btVector3(c[0], c[1], c[2]));
+            }
+        }
+        btCollisionShape* collisionShape = new btBvhTriangleMeshShape(triangleMesh, false);
+
+
+        btDefaultMotionState* motionstate = new btDefaultMotionState(btTransform(
+                btQuaternion(orientation.x, orientation.z, -orientation.y),
+                btVector3(position.x,position.z, -position.y)
+        ));
+
+        btRigidBody::btRigidBodyConstructionInfo rigidBodyCI(
+                0,
+                motionstate,
+                collisionShape,
+                btVector3(0,0,0)
+        );
+
+        btRigidBody* rigidBody = new btRigidBody(rigidBodyCI);
+        world.rigidBodies.push_back(rigidBody);
+        rigidBody->getCollisionShape()->setLocalScaling(btVector3(scale.x, scale.z, scale.y));
+        world.addRigidBody(*this, rigidBody);
+        rigidBody->setUserPointer((void*)world.rigidBodies.size());
+    }
     void Draw(LinkedShader shader) {
+        updateModel();
         for (Mesh mesh : meshes)
         {
             mesh.Draw(shader);
@@ -62,7 +189,6 @@ public:
     }
 
 protected:
-    std::vector<Mesh> meshes;
     std::string directory;
     std::vector<Texture> textures_loaded;
 
@@ -183,7 +309,6 @@ protected:
             }
             if (!skip)
             {
-
                 Texture texture(this->directory, str.C_Str(), type);
                 texture.load(false);
                 textures.push_back(texture);
@@ -192,248 +317,20 @@ protected:
         }
         return textures;
     }
-
 };
 
-GLuint TextureFromFile(const char* path, string directory);
-
-
-class Modell
-{
-public:
-    glm::vec3 pos;
-    glm::vec3 size;
-
-    Modell() {};
-    Modell(glm::vec3 pos = glm::vec3(0.0f), glm::vec3 size = glm::vec3(1.0f))
-    : pos(pos), size(size)
-    {};
-
-    void Draw(LinkedShader shader)
+void World::updateWorld() {
+    for (int i = 0; i < rigidBodies.size(); i++)
     {
-        for (GLuint i = 0; i < this->meshes.size(); i++)
-        {
-            this->meshes[i].Draw(shader);
-        }
+        auto m = models[i];
+        auto rigidBody = rigidBodies[i];
+        auto proj = camera->projection;
+        auto view = camera->view;
+
+        glm::mat4 matWithoutScale = proj * view * m->getModel();
+        // rigidBody->getCollisionShape()->setLocalScaling(btVector3(m->scale.x, m->scale.y, m->scale.z));
+        btTransform transform;
+        transform.setFromOpenGLMatrix(glm::value_ptr(m->getModel()));
+        rigidBody->setWorldTransform(transform);
     }
-
-    void loadModel(string path)
-    {
-        Assimp::Importer importer;
-        const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices);
-
-        if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-        {
-            std::cout << "Assimp Error : " << importer.GetErrorString() << endl;
-            return;
-        }
-
-        this->directory = path.substr(0, path.find_last_of('/'));
-        this->processNode(scene->mRootNode, scene);
-    }
-
-private:
-    string directory;
-    vector<Mesh> meshes;
-    vector<Texture> textures_loaded;
-
-
-
-    void processNode(aiNode *node, const aiScene* scene)
-    {
-        for ( GLuint i = 0; i < node->mNumMeshes; i++)
-        {
-            aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
-
-            this->meshes.push_back(this->processMesh(mesh, scene));
-        }
-
-        for ( GLuint i = 0; i < node->mNumChildren; i++)
-        {
-            this->processNode(node->mChildren[i], scene);
-        }
-    }
-
-    Mesh processMesh(aiMesh *mesh, const aiScene *scene)
-    {
-        vector<Vertex> vertices;
-        vector<GLuint> indices;
-        vector<Texture> textures;
-
-        for (GLuint i = 0; i < mesh->mNumVertices; i++)
-        {
-            Vertex vertex;
-            glm::vec3 vector;
-            glm::vec3 vectorN;
-
-            vector.x = mesh->mVertices[i].x;
-            vector.y = mesh->mVertices[i].y;
-            vector.z = mesh->mVertices[i].z;
-            vertex.Position = vector;
-
-            if (mesh->mNormals) {
-                vectorN.x = mesh->mNormals[i].x;
-                vectorN.y = mesh->mNormals[i].y;
-                vectorN.z = mesh->mNormals[i].z;
-                vertex.Normal = vectorN;
-            }
-
-            if (mesh->mColors[0])
-            {
-                glm::vec4 rgb;
-
-                rgb.x = mesh->mColors[0][i].r;
-                rgb.y = mesh->mColors[0][i].g;
-                rgb.z = mesh->mColors[0][i].b;
-                rgb.w = mesh->mColors[0][i].a;
-                vertex.Color = rgb;
-            }
-            else
-                vertex.Color = glm::vec4(1.0f);
-
-            if (mesh->mTextureCoords[0])
-            {
-                glm::vec2 vec;
-
-                vec.x = mesh->mTextureCoords[0][i].x;
-                vec.y = mesh->mTextureCoords[0][i].y;
-                vertex.TexCoords = vec;
-            }
-            else
-                vertex.TexCoords = glm::vec2(0.0f, 0.0f);
-
-            vertices.push_back(vertex);
-        }
-
-
-        for (GLuint i = 0; i < mesh->mNumFaces; i++)
-        {
-            aiFace face = mesh->mFaces[i];
-            if (face.mNumIndices < 3) {
-                continue;
-            }
-            assert(face.mNumIndices == 3);
-            for (GLuint j = 0; j < face.mNumIndices; j++)
-                indices.push_back(face.mIndices[j]);
-        }
-
-        if (mesh->mMaterialIndex >= 0)
-        {
-            aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
-
-            vector<Texture> diffuseMaps = this->loadMaterialTextures(material, aiTextureType_DIFFUSE, aiTextureType_DIFFUSE);
-            textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-
-            vector<Texture> specularMaps = this->loadMaterialTextures(material, aiTextureType_SPECULAR, aiTextureType_SPECULAR);
-            textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
-
-            vector<Texture> reflectionMaps = this->loadMaterialTextures(material, aiTextureType_REFLECTION, aiTextureType_REFLECTION);
-            textures.insert(textures.end(), reflectionMaps.begin(), reflectionMaps.end());
-        }
-        return Mesh(vertices, indices, textures);
-    }
-
-    vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, aiTextureType texture_type)
-    {
-        vector<Texture> textures;
-
-        for (GLuint i = 0; i < mat->GetTextureCount(type); i++)
-        {
-            aiString str;
-            mat->GetTexture(type, i, &str);
-
-            GLboolean skip = false;
-
-            for (GLuint j = 0; j < textures_loaded.size(); j++)
-            {
-                if (textures_loaded[j].path == str.C_Str())
-                {
-                    textures.push_back(textures_loaded[j]);
-                    skip = true;
-                    break;
-                }
-            }
-            if (!skip)
-            {
-                Texture texture;
-                texture.id = TextureFromFile(str.C_Str(), this->directory);
-                texture.type = texture_type;
-                texture.path = str.C_Str();
-                textures.push_back(texture);
-
-                this->textures_loaded.push_back(texture);
-            }
-        }
-        return textures;
-    }
-};
-
-
-GLuint TextureFromFile(const char* path, string directory)
-{
-    string filename = string(path);
-    filename = directory + '/' + filename;
-    GLuint textureID;
-    glGenTextures(1, &textureID);
-
-    int width;
-    int height;
-    int channels;
-    unsigned char* image = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb);
-
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // std::cout << width << " " <<  height << " " << channels << std::endl;
-    stbi_image_free(image);
-    return textureID;
 }
-
-class Textured {
-public:
-    Textured(const char* _path, const char* _tex_type, GLenum _tex_id, GLenum _format, GLenum _data_type)
-            :   type(_tex_type), tex_id(_tex_id)
-    {
-        int W, H, C;
-        stbi_set_flip_vertically_on_load(true);
-        unsigned char* pixels = stbi_load(_path, &W, &H, &C, 0);
-        glGenTextures(1, &id);
-        glActiveTexture(GL_TEXTURE0 + tex_id);
-        glBindTexture(GL_TEXTURE_2D, id);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT); // GL_REPEAT
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT_ARB); // GL_REPEAT
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, _format, _data_type, pixels);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        stbi_image_free(pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    GLuint id;
-    const char*  type;
-    GLuint tex_id;
-
-    void assign_unit(Shader& shader, const char* uniform, GLuint tex_id) {
-        GLuint texture_uniform = glGetUniformLocation(shader.ID, uniform);
-        shader.Activate();
-        glUniform1i(texture_uniform, tex_id);
-    }
-    void bind() {
-        glActiveTexture(GL_TEXTURE0 + tex_id);
-        glBindTexture(GL_TEXTURE_2D, id);
-    }
-    void unbind() {
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    void del() {
-        glDeleteTextures(1, &id);
-    }
-};

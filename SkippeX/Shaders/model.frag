@@ -1,5 +1,7 @@
 #version 460 core
 
+precision mediump float;
+
 struct Material {
     vec4 diffuse;
     vec4 specular;
@@ -27,29 +29,82 @@ uniform vec4 Ucolor;
 uniform Material material;
 uniform int noTex;
 
+uniform vec3 mousePos;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+uniform float near;
+uniform float far;
+uniform mat4 invProjectionView;
+uniform vec3 windowDimensions;
+
+const int marchSteps = 64;
+const float epsilon = 1.0e-5;
+
+struct Ray
+{
+    vec3 origin;
+    vec3 direction;
+};
+
+float raymarch(vec3 rayOrigin, vec3 rayDirection, float near, float far)
+{
+    float dist = near + epsilon;
+
+    float t = 0.0;
+
+    for (int i = 0; i < marchSteps; i++)
+    {
+        if (abs(dist) < near || t > far)
+        break;
+
+        t += dist;
+        vec3 p = rayOrigin + t * rayDirection;
+    }
+
+    return t;
+}
+
 void main()
 {
+    float width = windowDimensions.x;
+    float height = windowDimensions.y;
+    float mouseX = mousePos.x / (width  * 0.5f) - 1.0f;
+    float mouseY = mousePos.y / (height * 0.5f) - 1.0f;
+
+    vec4 screenPos = vec4(mouseX, -mouseY, 1.0f, 1.0f);
+    vec4 worldPos = inverse(projection * view) * screenPos;
+    vec3 dir = normalize(vec3(worldPos));
+
+    Ray ray;
+    ray.origin = cameraPos;
+    ray.direction = dir;
+
+    float t = raymarch(ray.origin, ray.direction, near, far);
+    vec4 tColor = vec4(t);
+    vec4 lColor = lightColor;
 
     float dist = (1.0f / fadeOff) * length(lightPos - FragPos);
     float a = 5.0;
     float b = 1.0;
-    float intensity = 1.0f / (a * dist * dist + b * dist + 1.0f);
+    float intensity = t * 1.0f / (a * dist * dist + b * dist + 1.0f);
 
     // Ambient
-    vec4 ambient = ambientStrength * lightColor;
+    vec4 ambient = ambientStrength * lColor;
 
     // Diffuse
     vec3 norm = normalize(Normal);
     vec3 lightDir = normalize(lightPos - FragPos);
     float diffuseStrength = max(dot(norm, lightDir), 0.0f);
-    vec4 diffuse = diffuseStrength * lightColor;
+    vec4 diffuse = diffuseStrength * lColor;
 
     // Specular
 
     vec3 viewDir = normalize(cameraPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 128);
-    vec4 specular = specularStrength * spec * lightColor;
+    vec4 specular = specularStrength * spec * lColor;
 
     vec4 diffMap;
     vec4 specMap;

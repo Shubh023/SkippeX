@@ -38,6 +38,7 @@ int width = 1920;
 int height = 1080;
 float zoom = 45.f;
 unsigned int samples = 8;
+double xpos, ypos;
 
 float rectangle_vertices[] = {
         -1.0f,  1.0f,  0.0f, 1.0f,
@@ -57,6 +58,7 @@ static void error_callback(int error, const char* description);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 
 // Function prototypes
 void input(Camera& camera);
@@ -65,6 +67,59 @@ void glCheckError(const char* s);
 
 // States
 bool active_mouse = false;
+
+
+void ScreenPosToWorldRay(
+        int mouseX, int mouseY,             // Mouse position, in pixels, from bottom-left corner of the window
+        int screenWidth, int screenHeight,  // Window size, in pixels
+        glm::mat4 ViewMatrix,               // Camera position and orientation
+        glm::mat4 ProjectionMatrix,         // Camera parameters (ratio, field of view, near and far planes)
+        glm::vec3& out_origin,              // Ouput : Origin of the ray. /!\ Starts at the near plane, so if you want the ray to start at the camera's position instead, ignore this.
+        glm::vec3& out_direction            // Ouput : Direction, in world space, of the ray that goes "through" the mouse.
+){
+
+    // The ray Start and End positions, in Normalized Device Coordinates (Have you read Tutorial 4 ?)
+    glm::vec4 lRayStart_NDC(
+            ((float)mouseX/(float)screenWidth  - 0.5f) * 2.0f, // [0,1024] -> [-1,1]
+            ((float)mouseY/(float)screenHeight - 0.5f) * 2.0f, // [0, 768] -> [-1,1]
+            -1.0, // The near plane maps to Z=-1 in Normalized Device Coordinates
+            1.0f
+    );
+    glm::vec4 lRayEnd_NDC(
+            ((float)mouseX/(float)screenWidth  - 0.5f) * 2.0f,
+            ((float)mouseY/(float)screenHeight - 0.5f) * 2.0f,
+            0.0,
+            1.0f
+    );
+
+    // The Projection matrix goes from Camera Space to NDC.
+    // So inverse(ProjectionMatrix) goes from NDC to Camera Space.
+    glm::mat4 InverseProjectionMatrix = glm::inverse(ProjectionMatrix);
+
+    // The View Matrix goes from World Space to Camera Space.
+    // So inverse(ViewMatrix) goes from Camera Space to World Space.
+    glm::mat4 InverseViewMatrix = glm::inverse(ViewMatrix);
+
+    glm::vec4 lRayStart_camera = InverseProjectionMatrix * lRayStart_NDC;    lRayStart_camera/=lRayStart_camera.w;
+    glm::vec4 lRayStart_world  = InverseViewMatrix       * lRayStart_camera; lRayStart_world /=lRayStart_world .w;
+    glm::vec4 lRayEnd_camera   = InverseProjectionMatrix * lRayEnd_NDC;      lRayEnd_camera  /=lRayEnd_camera  .w;
+    glm::vec4 lRayEnd_world    = InverseViewMatrix       * lRayEnd_camera;   lRayEnd_world   /=lRayEnd_world   .w;
+
+
+    // Faster way (just one inverse)
+    //glm::mat4 M = glm::inverse(ProjectionMatrix * ViewMatrix);
+    //glm::vec4 lRayStart_world = M * lRayStart_NDC; lRayStart_world/=lRayStart_world.w;
+    //glm::vec4 lRayEnd_world   = M * lRayEnd_NDC  ; lRayEnd_world  /=lRayEnd_world.w;
+
+
+    glm::vec3 lRayDir_world(lRayEnd_world - lRayStart_world);
+    lRayDir_world = glm::normalize(lRayDir_world);
+
+
+    out_origin = glm::vec3(lRayStart_world);
+    out_direction = glm::normalize(lRayDir_world);
+}
+
 
 int main() {
 
@@ -109,9 +164,11 @@ int main() {
     fprintf(stderr, "OpenGL %s\n", glGetString(GL_VERSION));
 
     // Setting up Callbacks
+
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetErrorCallback(error_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    glfwSetCursorPosCallback(window, cursor_position_callback);
 
     // Enable or Disable VSYNC
     glfwSwapInterval(VSYNC);
@@ -120,7 +177,7 @@ int main() {
     // Enable DEPTH_TEST
     glEnable(GL_DEPTH_TEST);
     // Enable Multisampling
-    glEnable(GL_MULTISAMPLE);
+
     // Enables Gamma Correction
     // glEnable(GL_FRAMEBUFFER_SRGB);
 
@@ -134,7 +191,11 @@ int main() {
     ImGui_ImplOpenGL3_Init("#version 460");
 
     // Define Camera
-    Camera camera(width, height, glm::vec3(0.0f, 7.5f, 20.f), 0.25, 65.f);
+    glm::vec3 camPos = glm::vec3(0.0f, 0.f, 5.f);
+    Camera camera(width, height, camPos, 0.25, 65.f);
+
+    // Define World
+    World world(&camera);
 
     // Define Shaders
     LinkedShader nanosuit_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
@@ -159,7 +220,7 @@ int main() {
     float speed = 1.0f;
     float mscale = 1.0f;
     float lscale = 0.2f;
-    float plscale = 0.15f;
+    float plscale = 0.150f;
     float radius = 10.0f;
     float rheight = 0.05f;
     float ambientStrength = 0.2f;
@@ -167,10 +228,11 @@ int main() {
     float fadeOff = 100.0f;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+    std::vector<float> fps_values(50, 0);
 
     // Plane Variables
     glm::vec4 planeColor = glm::vec4(1.0f);
-    glm::vec3 planePos = glm::vec3(0.0f, 2.0f, 0.0f);
+    glm::vec3 planePos = glm::vec3(0.0f, -0.5f, 0.0f);
     glm::mat4 plane_model = glm::mat4(1.0f);
     glm::vec3 rotate_plane(0.f, 0.f, 0.f);
     plane_model = glm::translate(plane_model, planePos);
@@ -185,18 +247,20 @@ int main() {
     // Lighting Variables
     glm::vec4 lightColor = glm::vec4(1.0f);
     glm::vec3 lightPos = glm::vec3(0.0f, 13.0f, 2.0f);
-    glm::mat4 lightModel = glm::mat4(1.0f);
-    lightModel = glm::translate(lightModel, lightPos);
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
-    Model nanosuit_model(glm::vec3(0.0f, -0.5, 0), glm::vec3(mscale), false);
-    nanosuit_model.loadModel("nanosuit/nanosuit.obj");
+    Model nanosuit_model(glm::vec3(0.0f, 0, 0), glm::vec3(mscale), true);
+    nanosuit_model.loadModel("sphere/scene.gltf");
+    nanosuit_model.addRigidBodyToWorld(world);
 
     Model plane(planePos, glm::vec3(plscale), false);
     plane.loadModel("Sponza/Sponza.gltf");
+    plane.addRigidBodyToWorld(world);
 
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
+
+    std::string message;
 
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
@@ -209,14 +273,44 @@ int main() {
         input(camera);
         if (active_mouse != 0)
             camera.movements(window);
-        camera.update(zoom, 0.01f, 1000.0f);
+        camera.update(55.f, 0.01f, 1000.0f);
         /*
         lightPos = camera.P;
         */
-        lightPos.x = radius * cos(time * speed);
-        lightPos.z = radius * sin(time * speed);
-        lightPos.y = rheight * (time * speed);
+        uv_sphere.position.x = radius * cos(time * speed);
+        uv_sphere.position.y = radius * sin(time * speed);
+        uv_sphere.position.z = rheight * abs(cos(time * speed)) * time * speed;
 
+        world.updateWorld();
+
+        glm::vec3 out_origin;
+        glm::vec3 out_direction;
+        ScreenPosToWorldRay(
+                xpos, ypos,
+                width, height,
+                camera.view,
+                camera.projection,
+                out_origin,
+                out_direction
+        );
+
+        out_direction = out_direction * 500.0f;
+
+        btCollisionWorld::ClosestRayResultCallback RayCallback(btVector3(out_origin.x, out_origin.y, out_origin.z), btVector3(out_direction.x, out_direction.y, out_direction.z));
+        world.dynamicsWorld->rayTest(btVector3(out_origin.x, out_origin.y, out_origin.z), btVector3(out_direction.x, out_direction.y, out_direction.z), RayCallback);
+        if(RayCallback.hasHit()) {
+            std::ostringstream oss;
+            oss << "mesh " << (size_t)RayCallback.m_collisionObject->getUserPointer();
+            btVector3 End = RayCallback.m_hitPointWorld;
+            btVector3 Normal = RayCallback.m_hitNormalWorld;
+            printf("End(%d, %d, %d)\n", End.x(), End.y(), End.z());
+            message = oss.str();
+        }else{
+            message = "background";
+        }
+        btVector3 p0 = world.rigidBodies[0]->getCenterOfMassPosition();
+        std::cout << message  << std::endl;
+        //printf("(%d, %d, %d)\n", p0.x(), p0.y(), p0.z());
 
         // Background Fill Color
         if (active_mouse)
@@ -235,29 +329,27 @@ int main() {
 
         /** Draw Models **/
         // Drawing UV_Sphere as a light
-        glm::mat4 plane_model(1.0f);
-        plane_model = glm::translate(plane_model, plane.pos);
-        plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.x), glm::vec3(1.0f, 0.0f, 0.0f));
-        plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.y), glm::vec3(0.0f, 1.0f, 0.0f));
-        plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.z), glm::vec3(0.0f, 0.0f, 1.0f));
-        plane_model = glm::scale(plane_model, glm::vec3(plscale));
-
         plane_shader.Activate();
 
         glCheckError("plane_shader.Activate();");
         glClearError();
 
         // Settings Light uniforms
-        plane_shader.SetVec3("lightPos", lightPos);
+        plane_shader.SetVec3("lightPos", uv_sphere.position);
         plane_shader.SetVec4("lightColor", lightColor);
         plane_shader.SetFloat("ambientStrength", ambientStrength);
         plane_shader.SetFloat("specularStrength", specularStrength);
         plane_shader.SetFloat("fadeOff", fadeOff);
 
         // Settings Model uniforms
-        plane_shader.SetMat4("model", plane_model);
+        plane_shader.SetMat4("model", plane.getModel());
         plane_shader.SetMat4("view", camera.view);
         plane_shader.SetMat4("projection", camera.projection);
+        plane_shader.SetMat4("invProjectionView", glm::inverse(camera.projection * camera.view));
+        plane_shader.SetVec3("windowDimensions", glm::vec3(width, height, 1.0f));
+        plane_shader.SetVec3("mousePos", glm::vec3(xpos, ypos, 1.0f));
+        plane_shader.SetFloat("near", camera.near);
+        plane_shader.SetFloat("far", camera.far);
         plane_shader.SetVec3("cameraPos", camera.P);
         plane_shader.SetVec4("Ucolor", planeColor);
         plane.Draw(plane_shader);
@@ -265,25 +357,21 @@ int main() {
         glClearError();
 
         // Drawing UV_Sphere as a light
-        glm::mat4 lightModel(1.0f);
-        lightModel = glm::translate(lightModel, glm::vec3(lightPos.x, lightPos.y, lightPos.z));
-        //lightModel = glm::rotate(lightModel, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
-        lightModel = glm::scale(lightModel, glm::vec3(lscale));
-
         uvsphere_shader.Activate();
 
         glCheckError("uvsphere_shader.Activate();");
         glClearError();
 
         // Settings Light uniforms
-        uvsphere_shader.SetVec3("lightPos", lightPos);
+        uvsphere_shader.SetVec3("lightPos", uv_sphere.position);
         uvsphere_shader.SetVec4("lightColor", lightColor);
         uvsphere_shader.SetFloat("ambientStrength", ambientStrength);
         uvsphere_shader.SetFloat("specularStrength", specularStrength);
         uvsphere_shader.SetFloat("fadeOff", fadeOff);
 
+
         // Settings Model uniforms
-        uvsphere_shader.SetMat4("model", lightModel);
+        uvsphere_shader.SetMat4("model", uv_sphere.getModel());
         uvsphere_shader.SetMat4("view", camera.view);
         uvsphere_shader.SetMat4("projection", camera.projection);
         uvsphere_shader.SetVec3("cameraPos", camera.P);
@@ -292,29 +380,29 @@ int main() {
         glClearError();
 
         // Drawing Nanosuit Model
-        glm::mat4 model(1.0f);
-        model = glm::translate(model, nanosuit_model.pos);
-        // model = glm::rotate(model, time * glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(mscale));
-
         nanosuit_shader.Activate();
 
         glCheckError("modelshader.Activate();");
         glClearError();
 
         // Settings Light uniforms
-        nanosuit_shader.SetVec3("lightPos", lightPos);
+        nanosuit_shader.SetVec3("lightPos", uv_sphere.position);
         nanosuit_shader.SetVec4("lightColor", lightColor);
         nanosuit_shader.SetFloat("ambientStrength", ambientStrength);
         nanosuit_shader.SetFloat("specularStrength", specularStrength);
         nanosuit_shader.SetFloat("fadeOff", fadeOff);
 
         // Settings Model uniforms
-        nanosuit_shader.SetMat4("model", model);
+        nanosuit_shader.SetMat4("model", nanosuit_model.getModel());
         nanosuit_shader.SetMat4("view", camera.view);
         nanosuit_shader.SetMat4("projection", camera.projection);
         nanosuit_shader.SetVec3("cameraPos", camera.P);
         nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
+        nanosuit_shader.SetMat4("invProjectionView", glm::inverse(camera.projection * camera.view));
+        nanosuit_shader.SetVec3("windowDimensions", glm::vec3(width, height, 1.0f));
+        nanosuit_shader.SetVec3("mousePos", glm::vec3(xpos, ypos, 1.0f));
+        nanosuit_shader.SetFloat("near", camera.near);
+        nanosuit_shader.SetFloat("far", camera.far);
         nanosuit_model.Draw(nanosuit_shader);
         glCheckError("nanosuit_model.Draw");
         glClearError();
@@ -336,17 +424,25 @@ int main() {
         std::reverse(z_data.begin(),z_data.end());
         z_data.push_back(lightPos.z);
 
+        std::reverse(fps_values.begin(),fps_values.end()); // first becomes last, reverses the vector
+        fps_values.pop_back();
+        std::reverse(fps_values.begin(),fps_values.end());
+        fps_values.push_back(ImGui::GetIO().Framerate);
+
+
         // Render Imgui and Implot Widgets
         ImGui::Begin("Change Light and Background");
+        ImGui::PlotLines((std::string("FPS : ") + std::to_string(fps_values[fps_values.size() - 1])).c_str(), fps_values.data(), fps_values.size());
         ImGui::Text("Background Settings");
         ImGui::ColorEdit3("clear color", (float*)&clear_color);
 
         ImGui::Text("Light Settings");
-        ImGui::SliderFloat("scale", &lscale, 0.0f, 1.0f);
         ImGui::SliderFloat("ambientStrength", &ambientStrength, 0.0f, 5.f);
         ImGui::SliderFloat("specularStrength", &specularStrength, 0.0f, 5.f);
         ImGui::SliderFloat("fadeOff", &fadeOff, 0.0f, 1000.0f);
-        ImGui::SliderFloat3("position", &lightPos[0], -100, 100);
+        ImGui::SliderFloat3("position", &uv_sphere.position[0], -10, 10);
+        ImGui::SliderFloat3("scale", &uv_sphere.scale[0], 0, 2.0f);
+        ImGui::SliderFloat3("orientation", &uv_sphere.orientation[0], 0, 360);
         ImGui::ColorEdit3("color", (float*)&lightColor);
 
         ImGui::Text("Light Movement Behaviour");
@@ -357,16 +453,20 @@ int main() {
         ImGui::Begin("Plane Settings");
         ImGui::Text("Plane Settings");
         ImGui::SliderFloat("scale", &plscale, 0.0f, 1.0f);
-        ImGui::SliderFloat3("position", &plane.pos[0], -100, 100);
-        ImGui::SliderFloat3("rotate", &rotate_plane[0], 0, 360);
+        ImGui::SliderFloat3("position", &plane.position[0], -10, 10);
+        ImGui::SliderFloat3("scale", &plane.scale[0], 0, 2.0f);
+        ImGui::SliderFloat3("orientation", &plane.orientation[0], 0, 360);
         ImGui::ColorEdit3("color", (float*)&planeColor);
         ImGui::End();
 
+        plane.scale = glm::vec3(plscale);
+
 
         ImGui::Begin("Selected Model settings");
-        ImGui::Text("model settings");
-        ImGui::SliderFloat3("position", &nanosuit_model.pos[0], -100, 100);
-        ImGui::SliderFloat("scale", &mscale, 0.0f, 5.0f);
+        ImGui::Text("Model");
+        ImGui::SliderFloat3("position", &nanosuit_model.position[0], -10, 10);
+        ImGui::SliderFloat3("scale", &nanosuit_model.scale[0], 0, 2.0f);
+        ImGui::SliderFloat3("orientation", &nanosuit_model.orientation[0], 0, 360);
         ImGui::End();
 
 
@@ -376,7 +476,7 @@ int main() {
         ImGui::SliderFloat("speed", &camera.speed, 0.0f, 100.0f);
         ImGui::SliderFloat3("position", &camera.P[0], -50.f, 50.f);
         if (ImGui::Button("reset position"))
-            camera.P = glm::vec3(0.0f, 7.5f, 20.f);
+            camera.P = camPos;
         ImGui::SliderFloat3("orientation", &camera.O[0], -1.f, 1.f);
         if (ImGui::Button("reset orientation"))
             camera.O = glm::vec3(0.0f, 0.0f, -1.0f);
@@ -434,6 +534,10 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     std::cout << xoffset << std::endl;
 }
 
+void cursor_position_callback(GLFWwindow* window, double x_pos, double y_pos) {
+    xpos = x_pos;
+    ypos = y_pos;
+}
 
 
 void input(Camera& camera) {

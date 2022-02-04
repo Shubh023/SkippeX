@@ -30,6 +30,8 @@ public:
     glm::mat4 projection = glm::mat4(1.0f);
     int width, height;
     bool initial = true;
+    float fov = 45.f;
+    float near = 0.1f, far = 1000.f;
     float speed = 0.1f, sensitivity = 100.f;
 };
 
@@ -46,9 +48,12 @@ Camera::Camera(int _width, int _height, glm::vec3 _P, float _speed, float _sensi
     sensitivity = _sensitivity;
 }
 
-void Camera::update(float fov, float near, float far) {
+void Camera::update(float nfov, float nNear, float nFar) {
+    near = nNear;
+    far = nFar;
     view = glm::mat4(1.0f);
     projection = glm::mat4(1.0f);
+    fov = nfov;
     view = glm::lookAt(P, P + O, U);
     projection = glm::perspective(glm::radians(fov), (float)width / height, near, far);
     CM = projection * view;
