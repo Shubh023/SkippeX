@@ -22,6 +22,10 @@ public:
     void movements(GLFWwindow* window);
     void update(float fov, float near, float far);
 
+    bool capture = false;
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> orientations;
+
     glm::vec3 P;
     glm::vec3 O = glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 U = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -30,7 +34,8 @@ public:
     glm::mat4 projection = glm::mat4(1.0f);
     int width, height;
     bool initial = true;
-    float speed = 0.1f, sensitivity = 100.f;
+    float near = 0.1f, far = 100.f;
+    float speed = 0.25f, sensitivity = 65.f;
 };
 
 Camera::Camera(int _width, int _height, glm::vec3 _P) {
@@ -52,6 +57,11 @@ void Camera::update(float fov, float near, float far) {
     view = glm::lookAt(P, P + O, U);
     projection = glm::perspective(glm::radians(fov), (float)width / height, near, far);
     CM = projection * view;
+    if (capture == true)
+    {
+        positions.push_back(P);
+        orientations.push_back(O);
+    }
 }
 
 void Camera::matrix(Shader &shader, const char *uniform) {

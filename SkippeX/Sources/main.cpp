@@ -36,8 +36,11 @@
 #define RESIZABLE GL_TRUE
 int width = 1920;
 int height = 1080;
-float zoom = 45.f;
+float fovDeg = 60.f;
 unsigned int samples = 8;
+
+
+
 
 float rectangle_vertices[] = {
         -1.0f,  1.0f,  0.0f, 1.0f,
@@ -119,6 +122,8 @@ int main() {
     // Enabling DEPTH
     // Enable DEPTH_TEST
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+
     // Enable Multisampling
     glEnable(GL_MULTISAMPLE);
     // Enables Gamma Correction
@@ -134,7 +139,7 @@ int main() {
     ImGui_ImplOpenGL3_Init("#version 460");
 
     // Define Camera
-    Camera camera(width, height, glm::vec3(0.0f, 7.5f, 20.f), 0.25, 65.f);
+    Camera camera(width, height, glm::vec3(0.0f, 4.5f, 7.5f), 0.25, 65.f);
 
     // Define Shaders
     LinkedShader nanosuit_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
@@ -157,22 +162,23 @@ int main() {
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto t_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
-    float mscale = 1.0f;
+    float mscale = 0.5f;
     float lscale = 0.2f;
-    float plscale = 0.15f;
-    float radius = 10.0f;
+    float plscale = 0.05f;
+    float radius = 5.0f;
     float rheight = 0.05f;
     float ambientStrength = 0.2f;
     float specularStrength = 0.5f;
-    float fadeOff = 100.0f;
+    float fadeOff = 70.0f;
+    bool replay = false;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
 
     // Plane Variables
     glm::vec4 planeColor = glm::vec4(1.0f);
-    glm::vec3 planePos = glm::vec3(0.0f, 2.0f, 0.0f);
+    glm::vec3 planePos = glm::vec3(0.0f, -0.25f, 0.0f);
     glm::mat4 plane_model = glm::mat4(1.0f);
-    glm::vec3 rotate_plane(0.f, 0.f, 0.f);
+    glm::vec3 rotate_plane(0.f, 90.f, 0.f);
     plane_model = glm::translate(plane_model, planePos);
 
     // Define Stuff for ImPlot widget
@@ -198,6 +204,7 @@ int main() {
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
+    int replay_ind = 0;
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
         // Keep track of elapsed time
@@ -207,9 +214,19 @@ int main() {
         // Polling & Updating Elements
         glfwPollEvents();
         input(camera);
-        if (active_mouse != 0)
+        if (active_mouse) {
             camera.movements(window);
-        camera.update(zoom, 0.01f, 1000.0f);
+            replay = false;
+        }
+        if (replay) {
+            replay_ind += 1;
+            if (replay_ind >= camera.positions.size())
+                replay_ind = 0;
+            camera.P = camera.positions[replay_ind];
+            camera.O = camera.orientations[replay_ind];
+        }
+
+        camera.update(fovDeg, 0.1f, 500.0f);
         /*
         lightPos = camera.P;
         */
@@ -259,6 +276,8 @@ int main() {
         plane_shader.SetMat4("view", camera.view);
         plane_shader.SetMat4("projection", camera.projection);
         plane_shader.SetVec3("cameraPos", camera.P);
+        plane_shader.SetFloat("far", camera.far);
+        plane_shader.SetFloat("near", camera.near);
         plane_shader.SetVec4("Ucolor", planeColor);
         plane.Draw(plane_shader);
         glCheckError("plane_shader.Draw");
@@ -287,6 +306,8 @@ int main() {
         uvsphere_shader.SetMat4("view", camera.view);
         uvsphere_shader.SetMat4("projection", camera.projection);
         uvsphere_shader.SetVec3("cameraPos", camera.P);
+        uvsphere_shader.SetFloat("far", camera.far);
+        uvsphere_shader.SetFloat("near", camera.near);
         uv_sphere.Draw(uvsphere_shader);
         glCheckError("uvsphere_shader.Draw");
         glClearError();
@@ -314,6 +335,8 @@ int main() {
         nanosuit_shader.SetMat4("view", camera.view);
         nanosuit_shader.SetMat4("projection", camera.projection);
         nanosuit_shader.SetVec3("cameraPos", camera.P);
+        nanosuit_shader.SetFloat("far", camera.far);
+        nanosuit_shader.SetFloat("near", camera.near);
         nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
         nanosuit_model.Draw(nanosuit_shader);
         glCheckError("nanosuit_model.Draw");
@@ -374,14 +397,23 @@ int main() {
         ImGui::Text("Camera");
         ImGui::SliderFloat("sensitivity", &camera.sensitivity, 0.0f, 100.0f);
         ImGui::SliderFloat("speed", &camera.speed, 0.0f, 100.0f);
+        ImGui::SliderFloat("fovDeg", &fovDeg, 0.0f, 100.0f);
         ImGui::SliderFloat3("position", &camera.P[0], -50.f, 50.f);
+        ImGui::Checkbox("Replay", &replay);
+
+        if (ImGui::Button("reset capture")) {
+            camera.positions.clear();
+            camera.orientations.clear();
+            replay_ind = 0;
+            replay = false;
+        }
+
         if (ImGui::Button("reset position"))
             camera.P = glm::vec3(0.0f, 7.5f, 20.f);
         ImGui::SliderFloat3("orientation", &camera.O[0], -1.f, 1.f);
         if (ImGui::Button("reset orientation"))
             camera.O = glm::vec3(0.0f, 0.0f, -1.0f);
         ImGui::End();
-
 
         ImGui::Begin("My Window");
         if (ImPlot::BeginPlot("My Plot")) {
@@ -444,10 +476,14 @@ void input(Camera& camera) {
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
             active_mouse = !active_mouse;
-            // std::cout << active_mouse << std::endl;
+
         }
     }
-}
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
+            camera.capture = !camera.capture;
+        }
+    }}
 
 void glClearError()
 {

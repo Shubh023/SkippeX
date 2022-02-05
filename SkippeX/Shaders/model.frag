@@ -26,6 +26,22 @@ uniform vec3 cameraPos;
 uniform vec4 Ucolor;
 uniform Material material;
 uniform int noTex;
+uniform float near;
+uniform float far;
+
+
+float linearizeDepth(float depth)
+{
+    return (2.0 * near * far) / (far + near - (depth * 2.0 - 1.0) * (far - near));
+}
+
+float logisticDepth(float depth)
+{
+    float steepness = 0.5f;
+    float offset = 5.0f;
+    float zVal = linearizeDepth(depth);
+    return (1 / (1 + exp(-steepness * (zVal - offset))));
+}
 
 void main()
 {
@@ -33,7 +49,10 @@ void main()
     float dist = (1.0f / fadeOff) * length(lightPos - FragPos);
     float a = 5.0;
     float b = 1.0;
-    float intensity = 1.0f / (a * dist * dist + b * dist + 1.0f);
+    float depth = 1 - logisticDepth(gl_FragCoord.z);
+    // float intensity = 1.0f / (a * dist * dist + b * dist + 1.0f);
+    float intensity = 1 - depth;
+    vec4 depthColor = lightColor * (1.0f - depth) + vec4(depth * vec3(0.85f, 0.85f, 0.90f), 1.0f);
 
     // Ambient
     vec4 ambient = ambientStrength * lightColor;
@@ -45,7 +64,6 @@ void main()
     vec4 diffuse = diffuseStrength * lightColor;
 
     // Specular
-
     vec3 viewDir = normalize(cameraPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 128);
@@ -63,5 +81,6 @@ void main()
     }
 
     // Combine
-    color = intensity * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
+    // color = depthColor * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
+    color = depthColor;
 }
