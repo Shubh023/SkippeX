@@ -43,9 +43,9 @@ float logisticDepth(float depth)
     return (1 / (1 + exp(-steepness * (zVal - offset))));
 }
 
-
 void main()
 {
+
     float dist = (1.0f / fadeOff) * length(lightPos - FragPos);
     float a = 5.0;
     float b = 1.0;
