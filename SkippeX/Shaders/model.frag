@@ -43,9 +43,9 @@ float logisticDepth(float depth)
     return (1 / (1 + exp(-steepness * (zVal - offset))));
 }
 
+
 void main()
 {
-
     float dist = (1.0f / fadeOff) * length(lightPos - FragPos);
     float a = 5.0;
     float b = 1.0;
@@ -81,6 +81,6 @@ void main()
     }
 
     // Combine
-    color = depthColor * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
+    color = intensity * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
     // color = depthColor;
 }

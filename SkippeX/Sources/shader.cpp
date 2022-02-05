@@ -152,6 +152,6 @@ void LinkedShader::SetFloat(const std::string &name, float value)
     glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
 }
 
-void LinkedShader::SetInt(const std::string &name, int value) {
+void LinkedShader::  SetInt(const std::string &name, int value) {
     glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
 }

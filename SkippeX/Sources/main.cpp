@@ -33,22 +33,24 @@
 // Define Useful Variables and macros
 #define VSYNC GL_TRUE
 #define FULLSCREEN GL_FALSE
-#define RESIZABLE GL_TRUE
+#define RESIZABLE GL_FALSE
+#define ACTIVATE_DEBUG false
 int width = 1920;
 int height = 1080;
 float fovDeg = 60.f;
 unsigned int samples = 8;
 
 
-
-
-float rectangle_vertices[] = {
-        -1.0f,  1.0f,  0.0f, 1.0f,
+float rectangleVertices[] =
+{
+        // Coords    // texCoords
+        1.0f, -1.0f,  1.0f, 0.0f,
         -1.0f, -1.0f,  0.0f, 0.0f,
-        1.0f, -1.0f,  1.0f, 0.0f,
         -1.0f,  1.0f,  0.0f, 1.0f,
+
+        1.0f,  1.0f,  1.0f, 1.0f,
         1.0f, -1.0f,  1.0f, 0.0f,
-        1.0f,  1.0f,  1.0f, 1.0f
+        -1.0f,  1.0f,  0.0f, 1.0f
 };
 
 // Global GLFW Window
@@ -63,8 +65,6 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
 // Function prototypes
 void input(Camera& camera);
-void glClearError();
-void glCheckError(const char* s);
 
 // States
 bool active_mouse = false;
@@ -78,12 +78,15 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
     glfwWindowHint(GLFW_SAMPLES, samples);
+    if (ACTIVATE_DEBUG)
+        glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+
 
     // Setup Monitor to Primary
     monitor = glfwGetPrimaryMonitor();
@@ -122,12 +125,12 @@ int main() {
     // Enabling DEPTH
     // Enable DEPTH_TEST
     glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+    // glDepthFunc(GL_LESS);
+
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
     glFrontFace(GL_CW);
-
 
     // Enable Multisampling
     glEnable(GL_MULTISAMPLE);
@@ -135,6 +138,7 @@ int main() {
     // glEnable(GL_FRAMEBUFFER_SRGB);
 
     // IMGUI Stuff
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
@@ -142,6 +146,17 @@ int main() {
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
+
+    if (ACTIVATE_DEBUG) {
+        int flags;
+        glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+        if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
+            glEnable(GL_DEBUG_OUTPUT);
+            glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+            glDebugMessageCallback(glDebugOutput, nullptr);
+            glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+        }
+    }
 
     // Define Camera
     Camera camera(width, height, glm::vec3(0.0f, 4.5f, 7.5f), 0.25, 65.f);
@@ -151,17 +166,20 @@ int main() {
                                                    shader(GL_FRAGMENT_SHADER, "model.frag") }));
     nanosuit_shader.Compile();
 
-    LinkedShader plane_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
-                                                       shader(GL_FRAGMENT_SHADER, "model.frag") }));
-    plane_shader.Compile();
-
     LinkedShader uvsphere_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "light.vert"),
                                                        shader(GL_FRAGMENT_SHADER, "light.frag") }));
     uvsphere_shader.Compile();
 
+    LinkedShader plane_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
+                                                       shader(GL_FRAGMENT_SHADER, "model.frag") }));
+    plane_shader.Compile();
+
     LinkedShader framebuffershader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "framebuffer.vert"),
                                                        shader(GL_FRAGMENT_SHADER, "framebuffer.frag") }));
     framebuffershader.Compile();
+
+    framebuffershader.Activate();
+    framebuffershader.SetInt("screenTexture", 0);
 
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
@@ -176,6 +194,7 @@ int main() {
     float specularStrength = 0.5f;
     float fadeOff = 70.0f;
     bool replay = false;
+    int replay_ind = 0;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
 
@@ -210,15 +229,57 @@ int main() {
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
-    int replay_ind = 0;
+
+    // Frame Rectangle
+    unsigned int rectVAO, rectVBO;
+    glGenVertexArrays(1, &rectVAO);
+    glGenBuffers(1, &rectVBO);
+    glBindVertexArray(rectVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), &rectangleVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+
+    // Create Frame Buffer Object
+    unsigned int FBO;
+    glGenFramebuffers(1, &FBO);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
+
+    // Create Framebuffer Texture
+    unsigned int framebufferTexture;
+    glGenTextures(1, &framebufferTexture);
+    glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture, 0);
+
+    // Create Render Buffer Object
+    unsigned int RBO;
+    glGenRenderbuffers(1, &RBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, RBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
+
+
+    // Error checking framebuffer
+    auto fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "Framebuffer error: " << fboStatus << std::endl;
+
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
         // Keep track of elapsed time
         auto t_now = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
 
+        glClearError();
+
         // Polling & Updating Elements
-        glfwPollEvents();
         input(camera);
         if (active_mouse) {
             camera.movements(window);
@@ -242,6 +303,11 @@ int main() {
         lightPos.y = rheight * (time * speed);
 
 
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
+
+        glCheckError(); glClearError();
+
+
         // Background Fill Color
         if (active_mouse)
             glClearColor(0.15f, 0.15f, 0.15f, 1.f);
@@ -249,13 +315,11 @@ int main() {
             glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        glEnable(GL_DEPTH_TEST);
 
-        // ImGUI Declaration
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
 
-        glClearError();
+        glCheckError(); glClearError();
+
 
         /** Draw Models **/
         // Drawing UV_Sphere as a light
@@ -267,9 +331,6 @@ int main() {
         plane_model = glm::scale(plane_model, glm::vec3(plscale));
 
         plane_shader.Activate();
-
-        glCheckError("plane_shader.Activate();");
-        glClearError();
 
         // Settings Light uniforms
         plane_shader.SetVec3("lightPos", lightPos);
@@ -287,8 +348,8 @@ int main() {
         plane_shader.SetFloat("near", camera.near);
         plane_shader.SetVec4("Ucolor", planeColor);
         plane.Draw(plane_shader);
-        glCheckError("plane_shader.Draw");
-        glClearError();
+
+        glCheckError(); glClearError();
 
         // Drawing UV_Sphere as a light
         glm::mat4 lightModel(1.0f);
@@ -298,8 +359,6 @@ int main() {
 
         uvsphere_shader.Activate();
 
-        glCheckError("uvsphere_shader.Activate();");
-        glClearError();
 
         // Settings Light uniforms
         uvsphere_shader.SetVec3("lightPos", lightPos);
@@ -316,8 +375,8 @@ int main() {
         uvsphere_shader.SetFloat("far", camera.far);
         uvsphere_shader.SetFloat("near", camera.near);
         uv_sphere.Draw(uvsphere_shader);
-        glCheckError("uvsphere_shader.Draw");
-        glClearError();
+
+        glCheckError(); glClearError();
 
         // Drawing Nanosuit Model
         glm::mat4 model(1.0f);
@@ -326,9 +385,6 @@ int main() {
         model = glm::scale(model, glm::vec3(mscale));
 
         nanosuit_shader.Activate();
-
-        glCheckError("modelshader.Activate();");
-        glClearError();
 
         // Settings Light uniforms
         nanosuit_shader.SetVec3("lightPos", lightPos);
@@ -346,8 +402,29 @@ int main() {
         nanosuit_shader.SetFloat("near", camera.near);
         nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
         nanosuit_model.Draw(nanosuit_shader);
-        glCheckError("nanosuit_model.Draw");
-        glClearError();
+
+
+        glCheckError(); glClearError();
+
+        // Bind the default framebuffer
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        // Draw the framebuffer rectangle
+        framebuffershader.Activate();
+        framebuffershader.SetInt("screenTexture", 0);
+        glBindVertexArray(rectVAO);
+        glActiveTexture(GL_TEXTURE0 + 0);
+        glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glCheckError(); glClearError();
+
+        // ImGUI Declaration
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
         // std::cout << camera.O.x << " " << camera.O.y << " " << camera.O.z << std::endl;
 
@@ -449,10 +526,12 @@ int main() {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-        glCheckError("Before Swap");
-        glClearError();
+        glCheckError(); glClearError();
+
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
+
+        glfwPollEvents();
     }   
     nanosuit_shader.Delete();
     uvsphere_shader.Delete();
@@ -462,12 +541,15 @@ int main() {
     nanosuit_model.Delete();
     uv_sphere.Delete();
 
+    glDeleteFramebuffers(1, &FBO);
+    glDeleteRenderbuffers(1, &RBO);
 
-
+    /*
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     ImPlot::DestroyContext();
+    */
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -488,8 +570,6 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     std::cout << xoffset << std::endl;
 }
 
-
-
 void input(Camera& camera) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
@@ -501,16 +581,4 @@ void input(Camera& camera) {
 
         }
     }
-}
-
-void glClearError()
-{
-    while (glGetError() != GL_NO_ERROR);
-}
-
-void glCheckError(const char* s)
-{
-    while (GLenum error = glGetError())
-        std::cout << "Opengl error : (" << error << ")" << " at " << s << std::endl;
-    glClearError();
 }
