@@ -369,7 +369,11 @@ int main() {
         std::reverse(fps_values.begin(),fps_values.end()); // first becomes last, reverses the vector
         fps_values.pop_back();
         std::reverse(fps_values.begin(),fps_values.end());
-        fps_values.push_back(ImGui::GetIO().Framerate);
+        auto fps = ImGui::GetIO().Framerate;
+        fps_values.push_back(fps);
+
+
+        glfwSetWindowTitle(window, (std::string("Skippex | OpenG - ") + std::to_string(fps)).c_str());
 
         // Render Imgui and Implot Widgets
         ImGui::Begin("Change Light and Background");
