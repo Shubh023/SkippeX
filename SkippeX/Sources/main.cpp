@@ -124,6 +124,11 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+    glFrontFace(GL_CW);
+
+
     // Enable Multisampling
     glEnable(GL_MULTISAMPLE);
     // Enables Gamma Correction
@@ -186,6 +191,7 @@ int main() {
     std::vector<float> y_data(100, 0);
     std::vector<float> z_data(100, 0);
     std::vector<float> t_data(100, 100);
+    std::vector<float> fps_values(100, 0);
     std::iota(t_data.begin(), t_data.end(), 0);
 
     // Lighting Variables
@@ -216,6 +222,9 @@ int main() {
         input(camera);
         if (active_mouse) {
             camera.movements(window);
+        }
+        if (camera.capture)
+        {
             replay = false;
         }
         if (replay) {
@@ -227,9 +236,7 @@ int main() {
         }
 
         camera.update(fovDeg, 0.1f, 500.0f);
-        /*
-        lightPos = camera.P;
-        */
+
         lightPos.x = radius * cos(time * speed);
         lightPos.z = radius * sin(time * speed);
         lightPos.y = rheight * (time * speed);
@@ -359,8 +366,14 @@ int main() {
         std::reverse(z_data.begin(),z_data.end());
         z_data.push_back(lightPos.z);
 
+        std::reverse(fps_values.begin(),fps_values.end()); // first becomes last, reverses the vector
+        fps_values.pop_back();
+        std::reverse(fps_values.begin(),fps_values.end());
+        fps_values.push_back(ImGui::GetIO().Framerate);
+
         // Render Imgui and Implot Widgets
         ImGui::Begin("Change Light and Background");
+        ImGui::PlotLines((std::string("FPS : ") + std::to_string(fps_values[fps_values.size() - 1])).c_str(), fps_values.data(), fps_values.size());
         ImGui::Text("Background Settings");
         ImGui::ColorEdit3("clear color", (float*)&clear_color);
 
@@ -385,21 +398,26 @@ int main() {
         ImGui::ColorEdit3("color", (float*)&planeColor);
         ImGui::End();
 
-
         ImGui::Begin("Selected Model settings");
         ImGui::Text("model settings");
         ImGui::SliderFloat3("position", &nanosuit_model.pos[0], -100, 100);
         ImGui::SliderFloat("scale", &mscale, 0.0f, 5.0f);
         ImGui::End();
 
-
         ImGui::Begin("Camera Settings");
-        ImGui::Text("Camera");
+        if (active_mouse)
+            ImGui::Text("Camera - Currently Active");
+        else
+            ImGui::Text("Camera - Currently Passive");
         ImGui::SliderFloat("sensitivity", &camera.sensitivity, 0.0f, 100.0f);
         ImGui::SliderFloat("speed", &camera.speed, 0.0f, 100.0f);
         ImGui::SliderFloat("fovDeg", &fovDeg, 0.0f, 100.0f);
         ImGui::SliderFloat3("position", &camera.P[0], -50.f, 50.f);
+        ImGui::Checkbox("Capture", &camera.capture);
         ImGui::Checkbox("Replay", &replay);
+
+        if (replay)
+            active_mouse = false;
 
         if (ImGui::Button("reset capture")) {
             camera.positions.clear();
@@ -479,11 +497,7 @@ void input(Camera& camera) {
 
         }
     }
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
-        if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
-            camera.capture = !camera.capture;
-        }
-    }}
+}
 
 void glClearError()
 {

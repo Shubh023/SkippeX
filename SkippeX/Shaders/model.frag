@@ -37,8 +37,8 @@ float linearizeDepth(float depth)
 
 float logisticDepth(float depth)
 {
-    float steepness = 0.5f;
-    float offset = 5.0f;
+    float steepness = 1/(far / 5);
+    float offset = far / 10;
     float zVal = linearizeDepth(depth);
     return (1 / (1 + exp(-steepness * (zVal - offset))));
 }
@@ -49,10 +49,10 @@ void main()
     float dist = (1.0f / fadeOff) * length(lightPos - FragPos);
     float a = 5.0;
     float b = 1.0;
-    float depth = 1 - logisticDepth(gl_FragCoord.z);
-    // float intensity = 1.0f / (a * dist * dist + b * dist + 1.0f);
-    float intensity = 1 - depth;
-    vec4 depthColor = lightColor * (1.0f - depth) + vec4(depth * vec3(0.85f, 0.85f, 0.90f), 1.0f);
+    float intensity = 1.0f / (a * dist * dist + b * dist + 1.0f);
+
+    float depth = logisticDepth(gl_FragCoord.z);
+    vec4 depthColor = lightColor * (1.0f - depth);
 
     // Ambient
     vec4 ambient = ambientStrength * lightColor;
@@ -81,6 +81,6 @@ void main()
     }
 
     // Combine
-    // color = depthColor * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
-    color = depthColor;
+    color = depthColor * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
+    // color = depthColor;
 }
