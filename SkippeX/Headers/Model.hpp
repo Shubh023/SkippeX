@@ -197,3 +197,78 @@ protected:
 };
 
 GLuint TextureFromFile(const char* path, string directory);
+
+
+class Ray
+{
+public:
+    glm::vec3 point;
+    glm::vec3 dir;
+
+    Ray() {};
+    Ray(glm::vec3 p, glm::vec3 d) :
+        point(p), dir(d)
+    {};
+    glm::vec3 get_sample(float t)
+    {
+        glm::vec3 result;
+        result = glm::vec3(point.x + t * dir.x, point.y + t * dir.y, point.z + t * dir.z);
+        return result;
+    }
+};
+
+class Sphere
+{
+public:
+    glm::vec3 center;
+    float radius;
+
+    Sphere() {};
+    Sphere(glm::vec3 p, float r) :
+        center(p), radius(r)
+    {};
+    bool get_intersection(Ray ray, glm::vec3 &point, glm::vec3 &normal)
+    {
+        glm::vec3  p1 = center;
+        glm::vec3 p2 = ray.point;
+        glm::vec3  oc;
+        oc = glm::vec3(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
+
+        // Calculate quadratic equation
+        float A = glm::dot(ray.dir, ray.dir);
+        float B = 2 * glm::dot(oc, ray.dir);
+        float C = glm::dot(oc, oc) - radius * radius;
+
+        float discriminant = B*B - 4 * A*C;
+        if (discriminant >= 0)
+        {
+            float root1 = (-B - sqrt(discriminant)) / 2 * A;
+            float root2 = (-B + sqrt(discriminant)) / 2 * A;
+            float solution = 0;
+
+            // No positive roots found
+            if ((root1 < 0) && (root2 < 0))
+                return false;
+
+            else if ((root1 < 0) && (root2 >= 0))
+                solution = root2;
+
+            else if ((root2 < 0) && (root1 >= 0))
+                solution = root1;
+
+            else if (root1 <= root2)
+                solution = root1;
+
+            else if (root2 <= root1)
+                solution = root2;
+
+            point = ray.get_sample(solution);
+
+            // Get surface normal
+            normal = glm::vec3(point.x - center.x, point.y - center.y, point.z - center.z);
+            normal = glm::normalize(normal);
+            return true;
+        }
+        return false;
+    }
+};

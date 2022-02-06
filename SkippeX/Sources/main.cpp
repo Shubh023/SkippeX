@@ -39,7 +39,8 @@ int width = 1920;
 int height = 1080;
 float fovDeg = 60.f;
 unsigned int samples = 4;
-
+double xpos, ypos;
+bool leftMouse = false;
 
 float rectangleVertices[] =
 {
@@ -62,6 +63,7 @@ static void error_callback(int error, const char* description);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 
 // Function prototypes
 void input(Camera& camera);
@@ -118,6 +120,8 @@ int main() {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetErrorCallback(error_callback);
     glfwSetScrollCallback(window, scroll_callback);
+    glfwSetCursorPosCallback(window, cursor_position_callback);
+
 
     // Enable or Disable VSYNC
     glfwSwapInterval(VSYNC);
@@ -228,15 +232,18 @@ int main() {
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
-    int instances = 1000;
+    int instances = 2;
+    std::vector<Sphere> bounding_spheres;
     std::vector<glm::mat4> instanceMatrix;
-    for (unsigned int i = 0; i < instances; i++) {
+    for (int i = -instances; i <= instances; i++) {
 
-        float t = i * 0.075;
+        int t = i * 4;
         float r = radius * 0.5;
-        glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 1 + t * rheight * 4, r * sin(t));
+        // glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 1 + t * rheight * 10, r * sin(t));
+        glm::vec3 tempTranslation = glm::vec3 (t, 1, 1);
         glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        glm::vec3 tempScale = glm::vec3(lscale * 0.5, lscale * 0.25, lscale * 0.5);
+        auto size = 1.25;
+        glm::vec3 tempScale = glm::vec3(size, size, size);
 
         glm::mat4 trans = glm::mat4(1.0f);
         glm::mat4 rot = glm::mat4(1.0f);
@@ -247,10 +254,11 @@ int main() {
         sca = glm::scale(sca, tempScale);
 
         instanceMatrix.push_back(trans * rot * sca);
+        bounding_spheres.emplace_back(tempTranslation, size);
     }
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
-    Model nanosuit_model(glm::vec3(0.0f, -0.5, 0), glm::vec3(mscale), false);
+    Model nanosuit_model(glm::vec3(0.0f, -0.5, -5), glm::vec3(mscale), false);
     nanosuit_model.loadModel("nanosuit/nanosuit.obj");
 
     Model plane(planePos, glm::vec3(plscale), false);
@@ -259,8 +267,9 @@ int main() {
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
-    Model spheres(lightPos, glm::vec3(lscale * 0.1), true, instances, instanceMatrix);
+    Model spheres(lightPos, glm::vec3(lscale * 0.1), true, instanceMatrix.size(), instanceMatrix);
     spheres.loadModel("uvsphere/uvsphere.obj");
+
 
     // Frame Rectangle
     unsigned int rectVAO, rectVBO;
@@ -359,10 +368,18 @@ int main() {
         lightPos.z = radius * sin(time * speed);
         lightPos.y = rheight * (time * speed);
 
+
+        Ray ray = camera.getClickDir(xpos, ypos, width, height);
+        glm::vec3 intersect, normal;
+        for (int f = 0; f < bounding_spheres.size(); f++) {
+            if (bounding_spheres[f].get_intersection(ray, intersect, normal)) {
+                printf("Intersected Sphere %d at (%d, %d, %d)\n", f, intersect.x, intersect.y, intersect.z);
+            }
+        }
+
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
 
         glCheckError(); glClearError();
-
 
         // Background Fill Color
         if (active_mouse)
@@ -494,6 +511,7 @@ int main() {
         framebuffershader.SetInt("screenTexture", 0);
         glBindVertexArray(rectVAO);
         glActiveTexture(GL_TEXTURE0 + 0);
+
         glBindTexture(GL_TEXTURE_2D, postProcessingTexture);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -573,6 +591,7 @@ int main() {
         ImGui::SliderFloat("fovDeg", &fovDeg, 0.0f, 100.0f);
         ImGui::SliderFloat3("position", &camera.P[0], -50.f, 50.f);
         ImGui::Checkbox("Capture", &camera.capture);
+        ImGui::Checkbox("Capture Cursor", &leftMouse);
         ImGui::Checkbox("Replay", &replay);
 
         if (replay)
@@ -624,12 +643,10 @@ int main() {
     glDeleteFramebuffers(1, &FBO);
     glDeleteRenderbuffers(1, &RBO);
 
-    /*
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
     ImPlot::DestroyContext();
-    */
 
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -646,6 +663,11 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+void cursor_position_callback(GLFWwindow* window, double x_pos, double y_pos) {
+    xpos = x_pos;
+    ypos = y_pos;
+}
+
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     std::cout << xoffset << std::endl;
 }
@@ -658,7 +680,6 @@ void input(Camera& camera) {
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
             active_mouse = !active_mouse;
-
         }
     }
 }

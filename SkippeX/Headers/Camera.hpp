@@ -21,7 +21,7 @@ public:
     void matrix(Shader &shader, const char *uniform);
     void movements(GLFWwindow* window);
     void update(float fov, float near, float far);
-
+    Ray getClickDir(int x, int y, int width, int height);
     bool capture = false;
     std::vector<glm::vec3> positions;
     std::vector<glm::vec3> orientations;
@@ -35,6 +35,7 @@ public:
     int width, height;
     bool initial = true;
     float near = 0.1f, far = 100.f;
+    float fov;
     float speed = 0.25f, sensitivity = 65.f;
 };
 
@@ -51,10 +52,13 @@ Camera::Camera(int _width, int _height, glm::vec3 _P, float _speed, float _sensi
     sensitivity = _sensitivity;
 }
 
-void Camera::update(float fov, float near, float far) {
+void Camera::update(float nfov, float nNear, float nFar) {
     view = glm::mat4(1.0f);
     projection = glm::mat4(1.0f);
     view = glm::lookAt(P, P + O, U);
+    fov = nfov;
+    near = nNear;
+    far = nFar;
     projection = glm::perspective(glm::radians(fov), (float)width / height, near, far);
     CM = projection * view;
     if (capture == true)
@@ -119,4 +123,21 @@ void Camera::movements(GLFWwindow *window) {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         initial = true;
     }
+}
+
+Ray Camera::getClickDir(int x, int y, int width, int height) {
+
+    const glm::vec2 pos(x,y);
+    glm::mat4 invMat= inverse(projection*view);
+    auto halfScreenWidth = width / 2;
+    auto halfScreenHeight = height / 2;
+    glm::vec4 near = glm::vec4((pos.x - halfScreenWidth) / halfScreenWidth, -1 * (pos.y - halfScreenHeight) / halfScreenHeight, -1, 1.0);
+    glm::vec4 far = glm::vec4((pos.x - halfScreenWidth) / halfScreenWidth, -1 * (pos.y - halfScreenHeight) / halfScreenHeight, 1, 1.0);
+    glm::vec4 nearResult = invMat * near;
+    glm::vec4 farResult = invMat * far;
+    nearResult /= nearResult.w;
+    farResult /= farResult.w;
+    glm::vec3 dir = glm::vec3(farResult - nearResult );
+    dir = normalize(dir);
+    return Ray(nearResult, dir);
 }
