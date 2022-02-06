@@ -127,7 +127,6 @@ int main() {
     glEnable(GL_DEPTH_TEST);
     // glDepthFunc(GL_LESS);
 
-
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
     glFrontFace(GL_CW);
@@ -181,9 +180,15 @@ int main() {
     LinkedShader framebuffershader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "framebuffer.vert"),
                                                        shader(GL_FRAGMENT_SHADER, "framebuffer.frag") }));
     framebuffershader.Compile();
-
     framebuffershader.Activate();
     framebuffershader.SetInt("screenTexture", 0);
+
+    /*
+    LinkedShader shadowShader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "shadow.vert"),
+                                                         shader(GL_FRAGMENT_SHADER, "shadow.frag") }));
+    shadowShader.Compile();
+    */
+
 
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
@@ -223,7 +228,7 @@ int main() {
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
-    int instances = 400;
+    int instances = 1000;
     std::vector<glm::mat4> instanceMatrix;
     for (unsigned int i = 0; i < instances; i++) {
 
@@ -599,8 +604,6 @@ int main() {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-        glCheckError(); glClearError();
-
         // Flip Buffers and Draw
         glfwSwapBuffers(window);
 
@@ -610,9 +613,13 @@ int main() {
     uvsphere_shader.Delete();
     plane_shader.Delete();
     framebuffershader.Delete();
+    spheres_shader.Delete();
+    // shadowShader.Delete();
+
     plane.Delete();
     nanosuit_model.Delete();
     uv_sphere.Delete();
+    spheres.Delete();
 
     glDeleteFramebuffers(1, &FBO);
     glDeleteRenderbuffers(1, &RBO);

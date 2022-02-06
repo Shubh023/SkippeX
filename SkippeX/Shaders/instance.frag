@@ -9,6 +9,7 @@ struct Material {
 uniform sampler2D diffuse0;
 uniform sampler2D specular0;
 uniform sampler2D reflection0;
+uniform sampler2D shadowMap;
 
 in vec2 TexCoords;
 in vec3 Normal;
