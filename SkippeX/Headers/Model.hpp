@@ -212,7 +212,8 @@ public:
     glm::vec3 get_sample(float t)
     {
         glm::vec3 result;
-        result = glm::vec3(point.x + t * dir.x, point.y + t * dir.y, point.z + t * dir.z);
+        glm::vec3 direction = normalize(dir);
+        result = glm::vec3(point.x + t * direction.x, point.y + t * direction.y, point.z + t * direction.z);
         return result;
     }
 };
@@ -227,10 +228,40 @@ public:
     Sphere(glm::vec3 p, float r) :
         center(p), radius(r)
     {};
-    bool get_intersection(Ray ray, glm::vec3 &point, glm::vec3 &normal)
+    bool get_intersection(Ray ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal)
+    {
+        float t0, t1;
+        // geometric solution
+        glm::highp_f32vec3 L = center - ray.point;
+        float tca = glm::dot(L, ray.dir);
+        // if (tca < 0) return false;
+        float d2 = glm::dot(L, L) - tca * tca;
+        float radius2 = 2 * radius;
+        if (d2 > radius2) return false;
+        float thc = sqrt(radius2 - d2);
+        t0 = tca - thc;
+        t1 = tca + thc;
+
+        if (t0 > t1) std::swap(t0, t1);
+
+        if (t0 < 0) {
+            t0 = t1; // if t0 is negative, let's use t1 instead
+            if (t0 < 0) return false; // both t0 and t1 are negative
+        }
+
+        float t = t0;
+        point = ray.get_sample(t);
+
+        normal = glm::highp_f32vec3(point.x - center.x, point.y - center.y, point.z - center.z);
+        normal = glm::normalize(normal);
+
+        return true;
+    }
+    bool get_intersection1(Ray ray, glm::vec3 &point, glm::vec3 &normal)
     {
         glm::vec3  p1 = center;
         glm::vec3 p2 = ray.point;
+
         glm::vec3  oc;
         oc = glm::vec3(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
 
@@ -246,7 +277,6 @@ public:
             float root2 = (-B + sqrt(discriminant)) / 2 * A;
             float solution = 0;
 
-            // No positive roots found
             if ((root1 < 0) && (root2 < 0))
                 return false;
 

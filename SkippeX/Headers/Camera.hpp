@@ -137,7 +137,8 @@ Ray Camera::getClickDir(int x, int y, int width, int height) {
     glm::vec4 farResult = invMat * far;
     nearResult /= nearResult.w;
     farResult /= farResult.w;
-    glm::vec3 dir = glm::vec3(farResult - nearResult );
+    auto res = farResult - nearResult;
+    glm::vec3 dir = glm::vec3(res.x, res.y, res.z);
     dir = normalize(dir);
     return Ray(nearResult, dir);
 }

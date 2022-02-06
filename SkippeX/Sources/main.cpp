@@ -72,14 +72,14 @@ void input(Camera& camera);
 bool active_mouse = false;
 bool showIntersected = false;
 bool polling_points = false;
+bool useSpheres = false;
 std::vector<glm::vec3> points_buffer;
 std::vector<float> points;
 std::vector<float> intersected_points;
 void renderLines(bool intersect);
-
+void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 normal,  glm::mat4 transform);
 
 int main() {
-
     
     // Load GLFW and Create a Window
     if (!glfwInit()) {
@@ -249,7 +249,7 @@ int main() {
         // glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 1 + t * rheight * 10, r * sin(t));
         glm::vec3 tempTranslation = glm::vec3 (t, 1, 1);
         glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        auto size = 1.25;
+        auto size = 1.25f;
         glm::vec3 tempScale = glm::vec3(size, size, size);
 
         glm::mat4 trans = glm::mat4(1.0f);
@@ -261,7 +261,7 @@ int main() {
         sca = glm::scale(sca, tempScale);
 
         instanceMatrix.push_back(trans * rot * sca);
-        bounding_spheres.emplace_back(tempTranslation, size);
+        bounding_spheres.emplace_back(tempTranslation, size * 0.595f);
     }
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
@@ -377,12 +377,16 @@ int main() {
 
 
         Ray ray = camera.getClickDir(xpos, ypos, width, height);
-        glm::vec3 intersect, normal;
+        glm::highp_f32vec3 intersect, normal;
+        int idSphere = -1;
         bool intersected = false;
         for (int f = 0; f < bounding_spheres.size(); f++) {
             if (bounding_spheres[f].get_intersection(ray, intersect, normal)) {
                 intersected = true;
-                printf("Intersected Sphere %d at (%d, %d, %d)\n", f, intersect.x, intersect.y, intersect.z);
+                // glm::vec3 posIntersect = glm::inverse(instanceMatrix[f]) * glm::vec4(intersect, 1.0f);
+                // printf("Intersected Sphere %d at (%d, %d, %d)\n", f, posIntersect.x, posIntersect.y, posIntersect.z);
+                printf("Intersected Sphere %d\n", f);
+                idSphere = f;
             }
         }
 
@@ -507,7 +511,7 @@ int main() {
 
         if (!active_mouse) {
             std::vector<float> pts;
-            if (showIntersected)
+            if (showIntersected or useSpheres)
                 pts = intersected_points;
             else
                 pts = points;
@@ -516,8 +520,12 @@ int main() {
             mline.draw();
         }
 
-        if (polling_points)
-            renderLines(intersected);
+        if (polling_points) {
+            if (useSpheres && idSphere != -1)
+                renderLinesOnSphere(intersected, bounding_spheres[idSphere], camera, glm::normalize(normal), instanceMatrix[idSphere]);
+            else if (!useSpheres)
+                renderLines(intersected);
+        }
 
         glCheckError(); glClearError();
 
@@ -569,7 +577,6 @@ int main() {
         std::reverse(fps_values.begin(),fps_values.end());
         auto fps = ImGui::GetIO().Framerate;
         fps_values.push_back(fps);
-
 
         glfwSetWindowTitle(window, (std::string("Skippex | OpenG - ") + std::to_string(fps)).c_str());
 
@@ -714,9 +721,11 @@ void input(Camera& camera) {
             active_mouse = !active_mouse;
             if (active_mouse == true)
             {
+                polling_points = false; /*
                 points_buffer.clear();
                 points.clear();
                 intersected_points.clear();
+                */
             }
         }
     }
@@ -733,7 +742,13 @@ void input(Camera& camera) {
     {
         showIntersected = !showIntersected;
     }
+    if(!active_mouse && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS)
+    {
+        useSpheres = !useSpheres;
+        std::cout << "useSpheres : " << useSpheres << std::endl;
+    }
 }
+
 void renderLines(bool intersect)
 {
     //Getting cursor position
@@ -791,4 +806,28 @@ void renderLines(bool intersect)
     }
 
     std::cout << "Total Points : " << points_buffer.size() << std::endl;
+}
+
+void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 normal,  glm::mat4 transform)
+{
+    glm::vec4 start = glm::vec4(sp.center + normal * (sp.radius * 1.5f), 1.0f);
+    glm::vec4 end = glm::vec4(sp.center + normal * (sp.radius * 4.f), 1.0f);
+
+    if (intersect)
+    {
+        points.push_back(start.x);
+        points.push_back(start.y);
+        points.push_back(start.z);
+        points.push_back(end.x);
+        points.push_back(end.y);
+        points.push_back(end.z);
+
+        intersected_points.push_back(start.x);
+        intersected_points.push_back(start.y);
+        intersected_points.push_back(start.z);
+        intersected_points.push_back(end.x);
+        intersected_points.push_back(end.y);
+        intersected_points.push_back(end.z);
+    }
+    std::cout << "Total Points : " << points.size() << std::endl;
 }
