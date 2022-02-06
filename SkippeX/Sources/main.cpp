@@ -70,6 +70,13 @@ void input(Camera& camera);
 
 // States
 bool active_mouse = false;
+bool showIntersected = false;
+bool polling_points = false;
+std::vector<glm::vec3> points_buffer;
+std::vector<float> points;
+std::vector<float> intersected_points;
+void renderLines(bool intersect);
+
 
 int main() {
 
@@ -371,8 +378,10 @@ int main() {
 
         Ray ray = camera.getClickDir(xpos, ypos, width, height);
         glm::vec3 intersect, normal;
+        bool intersected = false;
         for (int f = 0; f < bounding_spheres.size(); f++) {
             if (bounding_spheres[f].get_intersection(ray, intersect, normal)) {
+                intersected = true;
                 printf("Intersected Sphere %d at (%d, %d, %d)\n", f, intersect.x, intersect.y, intersect.z);
             }
         }
@@ -493,6 +502,22 @@ int main() {
         nanosuit_shader.SetFloat("near", camera.near);
         nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
         nanosuit_model.Draw(nanosuit_shader);
+
+        glCheckError(); glClearError();
+
+        if (!active_mouse) {
+            std::vector<float> pts;
+            if (showIntersected)
+                pts = intersected_points;
+            else
+                pts = points;
+            MLine mline(pts);
+            mline.setup();
+            mline.draw();
+        }
+
+        if (polling_points)
+            renderLines(intersected);
 
         glCheckError(); glClearError();
 
@@ -673,6 +698,13 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
 }
 
 void input(Camera& camera) {
+
+    if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+        points_buffer.clear();
+        points.clear();
+        intersected_points.clear();
+    }
+
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     }
@@ -680,6 +712,83 @@ void input(Camera& camera) {
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
             active_mouse = !active_mouse;
+            if (active_mouse == true)
+            {
+                points_buffer.clear();
+                points.clear();
+                intersected_points.clear();
+            }
         }
     }
+
+    if(!active_mouse && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        polling_points = true;
+    }
+    if(!active_mouse && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        polling_points = false;
+    }
+    if(!active_mouse && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
+    {
+        showIntersected = !showIntersected;
+    }
+}
+void renderLines(bool intersect)
+{
+    //Getting cursor position
+    glm::vec3 p(0.f,0.f,0.f);
+    p.x = xpos;
+    p.y = height - ypos;
+    p.z = 0;
+    // std::cout << "(" << p.x << "," << p.y << ")" << std::endl;
+
+    if (points_buffer.empty()) {
+        points_buffer.push_back(p);
+    }
+    else if (points_buffer.back().x != p.x and points_buffer.back().y != p.y) {
+        points_buffer.push_back(p);
+        if (points_buffer.size() > 2)
+        {
+            auto start = points_buffer.at(points_buffer.size() - 2);
+            auto end = points_buffer.back();
+            float x1 = start.x;
+            float y1 = start.y;
+            float x2 = end.x;
+            float y2 = end.y;
+            float w = width;
+            float h = height;
+
+            // convert 3d world space position 2d screen space position
+            x1 = 2*x1 / w - 1;
+            y1 = 2*y1 / h - 1;
+
+            x2 = 2*x2 / w - 1;
+            y2 = 2*y2 / h - 1;
+
+            start.x = x1;
+            start.y = y1;
+            end.x = x2;
+            end.y = y2;
+
+            points.push_back(start.x);
+            points.push_back(start.y);
+            points.push_back(start.z);
+            points.push_back(end.x);
+            points.push_back(end.y);
+            points.push_back(end.z);
+
+            if (intersect)
+            {
+                intersected_points.push_back(start.x);
+                intersected_points.push_back(start.y);
+                intersected_points.push_back(start.z);
+                intersected_points.push_back(end.x);
+                intersected_points.push_back(end.y);
+                intersected_points.push_back(end.z);
+            }
+        }
+    }
+
+    std::cout << "Total Points : " << points_buffer.size() << std::endl;
 }
