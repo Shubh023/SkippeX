@@ -38,7 +38,7 @@
 int width = 1920;
 int height = 1080;
 float fovDeg = 60.f;
-unsigned int samples = 8;
+unsigned int samples = 4;
 
 
 float rectangleVertices[] =
@@ -83,7 +83,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
-    glfwWindowHint(GLFW_SAMPLES, samples);
+    // glfwWindowHint(GLFW_SAMPLES, samples);
     if (ACTIVATE_DEBUG)
         glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 
@@ -133,7 +133,7 @@ int main() {
     glFrontFace(GL_CW);
 
     // Enable Multisampling
-    glEnable(GL_MULTISAMPLE);
+    // glEnable(GL_MULTISAMPLE);
     // Enables Gamma Correction
     // glEnable(GL_FRAMEBUFFER_SRGB);
 
@@ -187,7 +187,7 @@ int main() {
 
 
     // Define Useful variables (time_delta, ImGui elements, etc... )
-    auto t_start = std::chrono::high_resolution_clock::now();
+    auto tchrono_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
     float mscale = 0.5f;
     float lscale = 0.2f;
@@ -223,13 +223,13 @@ int main() {
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
-    int instances = 1000;
+    int instances = 400;
     std::vector<glm::mat4> instanceMatrix;
     for (unsigned int i = 0; i < instances; i++) {
 
-        float t = i * 0.05;
+        float t = i * 0.075;
         float r = radius * 0.5;
-        glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 2 + t * rheight * 0.75 , r * sin(t));
+        glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 1 + t * rheight * 4, r * sin(t));
         glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 tempScale = glm::vec3(lscale * 0.5, lscale * 0.25, lscale * 0.5);
 
@@ -277,32 +277,57 @@ int main() {
     // Create Framebuffer Texture
     unsigned int framebufferTexture;
     glGenTextures(1, &framebufferTexture);
-    glBindTexture(GL_TEXTURE_2D, framebufferTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture, 0);
+    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, framebufferTexture);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB, width, height, GL_TRUE);
+    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
+    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, framebufferTexture, 0);
 
     // Create Render Buffer Object
     unsigned int RBO;
     glGenRenderbuffers(1, &RBO);
     glBindRenderbuffer(GL_RENDERBUFFER, RBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
-
 
     // Error checking framebuffer
     auto fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "Framebuffer error: " << fboStatus << std::endl;
 
+    // Create Non multisamples Frame Buffer Object
+    unsigned int postProcessingFBO;
+    glGenFramebuffers(1, &postProcessingFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, postProcessingFBO);
+
+    // Create Framebuffer Texture
+    unsigned int postProcessingTexture;
+    glGenTextures(1, &postProcessingTexture);
+    glBindTexture(GL_TEXTURE_2D, postProcessingTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingTexture, 0);
+
+    // Error checking framebuffer
+    fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "Post-Processing Framebuffer error: " << fboStatus << std::endl;
+
+    auto t_start = glfwGetTime();
+
     // Rendering Loop
     while (!glfwWindowShouldClose(window)) {
         // Keep track of elapsed time
-        auto t_now = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+        // auto t_now = std::chrono::high_resolution_clock::now();
+        // float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+
+        double t_now = glfwGetTime();
+        double time = t_now - t_start;
 
         glClearError();
 
@@ -450,6 +475,11 @@ int main() {
         glCheckError(); glClearError();
 
         // Bind the default framebuffer
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, FBO);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, postProcessingFBO);
+        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
 
@@ -459,7 +489,7 @@ int main() {
         framebuffershader.SetInt("screenTexture", 0);
         glBindVertexArray(rectVAO);
         glActiveTexture(GL_TEXTURE0 + 0);
-        glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+        glBindTexture(GL_TEXTURE_2D, postProcessingTexture);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glCheckError(); glClearError();
