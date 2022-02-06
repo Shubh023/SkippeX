@@ -4,12 +4,11 @@
 #include <glm/glm.hpp>
 
 
-struct Vertexx
-{
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec3 color;
-    glm::vec2 texUV;
+struct Vertex {
+    glm::vec3 Position;
+    glm::vec3 Normal;
+    glm::vec4 Color;
+    glm::vec2 TexCoords;
 };
 
 class EBO
@@ -27,8 +26,8 @@ public:
 
 class VBO {
 public:
-    explicit VBO(std::vector<Vertexx>& vertices);
-
+    explicit VBO(std::vector<Vertex>& vertices);
+    VBO(std::vector<glm::mat4>& mat4s);
     void bind() const;
     static void unbind();
     void del();

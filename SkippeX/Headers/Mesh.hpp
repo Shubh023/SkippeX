@@ -10,6 +10,7 @@
 #include <assimp/postprocess.h>
 #include <assimp/IOStream.hpp>
 #include <assimp/IOSystem.hpp>
+#include "evao.hpp"
 
 #include <string>
 #include <fstream>
@@ -19,12 +20,7 @@
 
 using namespace std;
 
-struct Vertex {
-    glm::vec3 Position;
-    glm::vec3 Normal;
-    glm::vec4 Color;
-    glm::vec2 TexCoords;
-};
+
 
 
 class Texture {
@@ -87,26 +83,31 @@ public:
     aiColor4D diffuse;
     aiColor4D specular;
     aiColor4D reflective;
-    GLuint VAO;
+    VAO mVAO;
+
+    unsigned int instancing;
+
     bool noTex = false;
 
-    Mesh() {};
-    Mesh(vector<Vertex> vertices, vector<GLuint> indices, vector<Texture> textures)
-    : vertices(vertices), indices(indices), textures(textures), noTex(false)
+    Mesh(vector<Vertex> vertices, vector<GLuint> indices, vector<Texture> textures, unsigned int instancing = 1, std::vector<glm::mat4> instancesMatrix = {})
+    : vertices(vertices), indices(indices), textures(textures), noTex(false), instancing(instancing), mVBO(VBO(vertices)), mEBO(EBO(indices))
     {
-        this->Setup();
+        this->Setup(instancesMatrix);
     }
 
-    Mesh(vector<Vertex> vertices, vector<GLuint> indices, aiColor4D diffuse, aiColor4D specular, aiColor4D reflective)
+    Mesh(vector<Vertex> vertices, vector<GLuint> indices, aiColor4D diffuse, aiColor4D specular, aiColor4D reflective, unsigned int instancing = 1, std::vector<glm::mat4> instancesMatrix = {})
             :
             vertices(vertices),
             indices(indices),
             noTex(true),
             diffuse(diffuse),
             specular(specular),
-            reflective(reflective)
+            reflective(reflective),
+            instancing(instancing),
+            mVBO(VBO(vertices)),
+            mEBO(EBO(indices))
     {
-        this->Setup();
+        this->Setup(instancesMatrix);
     }
 
     void Draw(LinkedShader shader)
@@ -139,15 +140,17 @@ public:
                         name = "reflection" + std::to_string(reflection++);
                         break;
                 }
-
                 glUniform1i(glGetUniformLocation(shader.ID, name.data()), i);
                 glActiveTexture(GL_TEXTURE0 + i);
                 // glBindTexture(GL_TEXTURE_2D, textures[i].id);
                 textures[i].bind();
             }
         }
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(mVAO.ID);
+        if (instancing == 1)
+            glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        else
+            glDrawElementsInstanced(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0, instancing);
         glBindVertexArray(0);
 
         for (GLuint i = 0; i < this->textures.size(); i++)
@@ -159,25 +162,27 @@ public:
     }
 
     void Delete() {
-        glDeleteVertexArrays(1, &VAO);
-        glDeleteBuffers(1, &VBO);
-        glDeleteBuffers(1, &EBO);
+        mVBO.del();
+        mEBO.del();
+        mVAO.del();
     }
 
 private:
-    GLuint VBO, EBO;
+    VBO mVBO;
+    EBO mEBO;
 
-    void Setup(){
+    void Setup(std::vector<glm::mat4> instancesMatrix){
+
         // Setup VAO VBO EBO
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-        glGenBuffers(1, &EBO);
+        glGenVertexArrays(1, &mVAO.ID);
+        glGenBuffers(1, &mVBO.id);
+        glGenBuffers(1, &mEBO.ID);
 
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBindVertexArray(mVAO.ID);
+        glBindBuffer(GL_ARRAY_BUFFER, mVBO.id);
         glBufferData(GL_ARRAY_BUFFER, this->vertices.size() * sizeof(Vertex), &this->vertices[0], GL_STATIC_DRAW);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->EBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->mEBO.ID);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->indices.size() * sizeof(GLuint), &this->indices[0], GL_STATIC_DRAW);
 
         // Vertex Positions
@@ -192,10 +197,25 @@ private:
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid * ) offsetof(Vertex, Color));
 
-
         // Texture Coordinates
         glEnableVertexAttribArray(3);
         glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid * ) offsetof(Vertex, TexCoords));
+
+        VBO instanceVBO(instancesMatrix);
+
+        if (instancing != 1) {
+            instanceVBO.bind();
+
+            mVAO.link(instanceVBO, 4, 4, GL_FLOAT, sizeof(glm::mat4), (void *)0);
+            mVAO.link(instanceVBO, 5, 4, GL_FLOAT, sizeof(glm::mat4), (void *)(1 * sizeof(glm::vec4)));
+            mVAO.link(instanceVBO, 6, 4, GL_FLOAT, sizeof(glm::mat4), (void *)(2 * sizeof(glm::vec4)));
+            mVAO.link(instanceVBO, 7, 4, GL_FLOAT, sizeof(glm::mat4), (void *)(3 * sizeof(glm::vec4)));
+
+            glVertexAttribDivisor(4, 1);
+            glVertexAttribDivisor(5, 1);
+            glVertexAttribDivisor(6, 1);
+            glVertexAttribDivisor(7, 1);
+        }
 
         glBindVertexArray(0);
     }

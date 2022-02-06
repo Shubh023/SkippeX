@@ -170,8 +170,12 @@ int main() {
                                                        shader(GL_FRAGMENT_SHADER, "light.frag") }));
     uvsphere_shader.Compile();
 
-    LinkedShader plane_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
-                                                       shader(GL_FRAGMENT_SHADER, "model.frag") }));
+    LinkedShader spheres_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "instance.vert"),
+                                                       shader(GL_FRAGMENT_SHADER, "instance.frag") }));
+    spheres_shader.Compile();
+
+    LinkedShader plane_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"), // model.vert
+                                                       shader(GL_FRAGMENT_SHADER, "model.frag") })); //  model.frag
     plane_shader.Compile();
 
     LinkedShader framebuffershader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "framebuffer.vert"),
@@ -219,6 +223,27 @@ int main() {
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
+    int instances = 1000;
+    std::vector<glm::mat4> instanceMatrix;
+    for (unsigned int i = 0; i < instances; i++) {
+
+        float t = i * 0.05;
+        float r = radius * 0.5;
+        glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 2 + t * rheight * 0.75 , r * sin(t));
+        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 tempScale = glm::vec3(lscale * 0.5, lscale * 0.25, lscale * 0.5);
+
+        glm::mat4 trans = glm::mat4(1.0f);
+        glm::mat4 rot = glm::mat4(1.0f);
+        glm::mat4 sca = glm::mat4(1.0f);
+
+        trans = glm::translate(trans, tempTranslation);
+        rot = glm::mat4_cast(tempRotation);
+        sca = glm::scale(sca, tempScale);
+
+        instanceMatrix.push_back(trans * rot * sca);
+    }
+
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
     Model nanosuit_model(glm::vec3(0.0f, -0.5, 0), glm::vec3(mscale), false);
     nanosuit_model.loadModel("nanosuit/nanosuit.obj");
@@ -229,6 +254,8 @@ int main() {
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
+    Model spheres(lightPos, glm::vec3(lscale * 0.1), true, instances, instanceMatrix);
+    spheres.loadModel("uvsphere/uvsphere.obj");
 
     // Frame Rectangle
     unsigned int rectVAO, rectVBO;
@@ -302,7 +329,6 @@ int main() {
         lightPos.z = radius * sin(time * speed);
         lightPos.y = rheight * (time * speed);
 
-
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
 
         glCheckError(); glClearError();
@@ -317,9 +343,7 @@ int main() {
 
         glEnable(GL_DEPTH_TEST);
 
-
         glCheckError(); glClearError();
-
 
         /** Draw Models **/
         // Drawing UV_Sphere as a light
@@ -359,7 +383,6 @@ int main() {
 
         uvsphere_shader.Activate();
 
-
         // Settings Light uniforms
         uvsphere_shader.SetVec3("lightPos", lightPos);
         uvsphere_shader.SetVec4("lightColor", lightColor);
@@ -375,6 +398,27 @@ int main() {
         uvsphere_shader.SetFloat("far", camera.far);
         uvsphere_shader.SetFloat("near", camera.near);
         uv_sphere.Draw(uvsphere_shader);
+
+        glCheckError(); glClearError();
+
+        // Drawing spheres instances
+        spheres_shader.Activate();
+
+        // Settings Light uniforms
+        spheres_shader.SetVec3("lightPos", lightPos);
+        spheres_shader.SetVec4("lightColor", lightColor);
+        spheres_shader.SetFloat("ambientStrength", ambientStrength);
+        spheres_shader.SetFloat("specularStrength", specularStrength);
+        spheres_shader.SetFloat("fadeOff", fadeOff);
+
+        // Settings Model uniforms
+        spheres_shader.SetMat4("view", camera.view);
+        spheres_shader.SetMat4("projection", camera.projection);
+        spheres_shader.SetVec3("cameraPos", camera.P);
+        spheres_shader.SetFloat("far", camera.far);
+        spheres_shader.SetFloat("near", camera.near);
+        spheres_shader.SetVec4("Ucolor", glm::vec4(1.0f));
+        spheres.Draw(spheres_shader);
 
         glCheckError(); glClearError();
 
@@ -402,7 +446,6 @@ int main() {
         nanosuit_shader.SetFloat("near", camera.near);
         nanosuit_shader.SetVec4("Ucolor", glm::vec4(1.0f));
         nanosuit_model.Draw(nanosuit_shader);
-
 
         glCheckError(); glClearError();
 
