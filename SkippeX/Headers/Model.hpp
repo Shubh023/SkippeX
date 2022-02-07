@@ -202,18 +202,18 @@ GLuint TextureFromFile(const char* path, string directory);
 class Ray
 {
 public:
-    glm::vec3 point;
-    glm::vec3 dir;
+    glm::highp_f32vec3 point;
+    glm::highp_f32vec3 dir;
 
     Ray() {};
-    Ray(glm::vec3 p, glm::vec3 d) :
+    Ray(glm::highp_f32vec3 p, glm::highp_f32vec3 d) :
         point(p), dir(d)
     {};
-    glm::vec3 get_sample(float t)
+    glm::highp_f32vec3 get_sample(float t)
     {
-        glm::vec3 result;
-        glm::vec3 direction = normalize(dir);
-        result = glm::vec3(point.x + t * direction.x, point.y + t * direction.y, point.z + t * direction.z);
+        glm::highp_f32vec3 result;
+        glm::highp_f32vec3 direction = normalize(dir);
+        result = glm::highp_f32vec3(point.x + t * direction.x, point.y + t * direction.y, point.z + t * direction.z);
         return result;
     }
 };
@@ -257,17 +257,18 @@ public:
 
         return true;
     }
-    bool get_intersection1(Ray ray, glm::vec3 &point, glm::vec3 &normal)
+    bool get_intersection1(Ray ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal)
     {
-        glm::vec3  p1 = center;
-        glm::vec3 p2 = ray.point;
+        glm::highp_f32vec3 p1 = center;
+        glm::highp_f32vec3 p2 = ray.point;
+        glm::highp_f32vec3 raydir = glm::normalize(ray.dir);
 
-        glm::vec3  oc;
-        oc = glm::vec3(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
+        glm::highp_f32vec3  oc;
+        oc = glm::highp_f32vec3(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
 
         // Calculate quadratic equation
-        float A = glm::dot(ray.dir, ray.dir);
-        float B = 2 * glm::dot(oc, ray.dir);
+        float A = glm::dot(ray.dir, raydir);
+        float B = 2 * glm::dot(oc, raydir);
         float C = glm::dot(oc, oc) - radius * radius;
 
         float discriminant = B*B - 4 * A*C;
@@ -295,7 +296,7 @@ public:
             point = ray.get_sample(solution);
 
             // Get surface normal
-            normal = glm::vec3(point.x - center.x, point.y - center.y, point.z - center.z);
+            normal = glm::highp_f32vec3(point.x - center.x, point.y - center.y, point.z - center.z);
             normal = glm::normalize(normal);
             return true;
         }

@@ -376,15 +376,16 @@ int main() {
         lightPos.y = rheight * (time * speed);
 
 
-        Ray ray = camera.getClickDir(xpos, ypos, width, height);
+
         glm::highp_f32vec3 intersect, normal;
         int idSphere = -1;
         bool intersected = false;
         for (int f = 0; f < bounding_spheres.size(); f++) {
+            Ray ray = camera.getClickDir(int(xpos), int(ypos), width, height);
             if (bounding_spheres[f].get_intersection(ray, intersect, normal)) {
                 intersected = true;
-                // glm::vec3 posIntersect = glm::inverse(instanceMatrix[f]) * glm::vec4(intersect, 1.0f);
-                // printf("Intersected Sphere %d at (%d, %d, %d)\n", f, posIntersect.x, posIntersect.y, posIntersect.z);
+                glm::highp_f32vec4 posIntersect = glm::inverse(instanceMatrix[f]) * glm::highp_f32vec4(intersect, 1.0f);
+                printf("Intersected Sphere %d at (%f, %f, %f)\n", f, ray.point.x, ray.point.y, ray.point.z);
                 printf("Intersected Sphere %d\n", f);
                 idSphere = f;
             }
@@ -555,8 +556,6 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // std::cout << camera.O.x << " " << camera.O.y << " " << camera.O.z << std::endl;
-
         std::reverse(x_data.begin(),x_data.end()); // first becomes last, reverses the vector
         x_data.pop_back();
         std::reverse(x_data.begin(),x_data.end());
@@ -721,7 +720,8 @@ void input(Camera& camera) {
             active_mouse = !active_mouse;
             if (active_mouse == true)
             {
-                polling_points = false; /*
+                polling_points = false;
+                /*
                 points_buffer.clear();
                 points.clear();
                 intersected_points.clear();

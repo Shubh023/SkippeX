@@ -127,18 +127,19 @@ void Camera::movements(GLFWwindow *window) {
 
 Ray Camera::getClickDir(int x, int y, int width, int height) {
 
-    const glm::vec2 pos(x,y);
-    glm::mat4 invMat= inverse(projection*view);
-    auto halfScreenWidth = width / 2;
-    auto halfScreenHeight = height / 2;
-    glm::vec4 near = glm::vec4((pos.x - halfScreenWidth) / halfScreenWidth, -1 * (pos.y - halfScreenHeight) / halfScreenHeight, -1, 1.0);
-    glm::vec4 far = glm::vec4((pos.x - halfScreenWidth) / halfScreenWidth, -1 * (pos.y - halfScreenHeight) / halfScreenHeight, 1, 1.0);
-    glm::vec4 nearResult = invMat * near;
-    glm::vec4 farResult = invMat * far;
+    const glm::highp_f32vec2 pos(x,y);
+    glm::highp_f32mat4 invMat = glm::inverse(CM);
+    float halfScreenWidth = float(width) / 2.f;
+    float halfScreenHeight = float(height) / 2.f;
+    glm::highp_f32vec4 near = glm::vec4((pos.x - halfScreenWidth) / halfScreenWidth, -1 * (pos.y - halfScreenHeight) / halfScreenHeight, -1, 1.0);
+    glm::highp_f32vec4 far = glm::vec4((pos.x - halfScreenWidth) / halfScreenWidth, -1 * (pos.y - halfScreenHeight) / halfScreenHeight, 1, 1.0);
+    glm::highp_f32vec4 nearResult = invMat * near;
+    glm::highp_f32vec4 farResult = invMat * far;
     nearResult /= nearResult.w;
     farResult /= farResult.w;
-    auto res = farResult - nearResult;
-    glm::vec3 dir = glm::vec3(res.x, res.y, res.z);
+    // auto res = farResult - nearResult;
+    auto res = glm::vec3(nearResult.x, nearResult.y, nearResult.z) - P;
+    glm::highp_f32vec3 dir = glm::vec3(res.x, res.y, res.z);
     dir = normalize(dir);
-    return Ray(nearResult, dir);
+    return Ray(P, dir);
 }
