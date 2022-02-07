@@ -29,7 +29,6 @@
 #include <cmath>
 #include <numeric>
 
-
 // Define Useful Variables and macros
 #define VSYNC GL_TRUE
 #define FULLSCREEN GL_FALSE
@@ -73,11 +72,40 @@ bool active_mouse = false;
 bool showIntersected = false;
 bool polling_points = false;
 bool useSpheres = false;
+int switch_front_back = -1.f;
 std::vector<glm::vec3> points_buffer;
 std::vector<float> points;
 std::vector<float> intersected_points;
+std::vector<bool> intersectStates;
+std::vector<Sphere> bounding_spheres;
+std::vector<glm::mat4> instanceMatrix;
+Model spheres;
+
 void renderLines(bool intersect);
-void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 normal,  glm::mat4 transform);
+void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
+void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size=0.1f, float distance=0.5f);
+
+void updateSphereInstances(glm::vec3 pos, float size=0.1)
+{
+    for (int i = 0; i < instanceMatrix.size(); i++)
+    {
+        glm::vec3 tempTranslation = bounding_spheres[i].center;
+        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 tempScale = glm::vec3(size, size, size);
+
+        glm::mat4 trans = glm::mat4(1.0f);
+        glm::mat4 rot = glm::mat4(1.0f);
+        glm::mat4 sca = glm::mat4(1.0f);
+
+        trans = glm::translate(trans, tempTranslation);
+        rot = glm::mat4_cast(tempRotation);
+        sca = glm::scale(sca, tempScale);
+
+        instanceMatrix[i] = trans * rot * sca;
+    }
+    spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
+    spheres.loadModel("uvsphere/uvsphere.obj");
+}
 
 int main() {
     
@@ -188,6 +216,10 @@ int main() {
                                                        shader(GL_FRAGMENT_SHADER, "model.frag") })); //  model.frag
     plane_shader.Compile();
 
+    LinkedShader ballshader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"), // model.vert
+                                                    shader(GL_FRAGMENT_SHADER, "model.frag") })); //  model.frag
+    ballshader.Compile();
+
     LinkedShader framebuffershader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "framebuffer.vert"),
                                                        shader(GL_FRAGMENT_SHADER, "framebuffer.frag") }));
     framebuffershader.Compile();
@@ -200,16 +232,16 @@ int main() {
     shadowShader.Compile();
     */
 
-
-
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto tchrono_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
     float mscale = 0.5f;
     float lscale = 0.2f;
+    float defaultBallScale = 0.05f;
     float plscale = 0.05f;
     float radius = 5.0f;
     float rheight = 0.05f;
+    float defaultDrawHeight = 0.5f;
     float ambientStrength = 0.2f;
     float specularStrength = 0.5f;
     float fadeOff = 70.0f;
@@ -239,9 +271,24 @@ int main() {
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
+    glm::vec3 ballPos = glm::vec3 (0, 1, 1);
+    glm::quat ballRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    auto size = 2.f;
+    glm::vec3 ballScale = glm::vec3(size, size, size);
+
+    glm::mat4 trans = glm::mat4(1.0f);
+    glm::mat4 rot = glm::mat4(1.0f);
+    glm::mat4 sca = glm::mat4(1.0f);
+
+    trans = glm::translate(trans, ballPos);
+    rot = glm::mat4_cast(ballRotation);
+    sca = glm::scale(sca, ballScale);
+
+    glm::mat4 ballModel= trans * rot * sca;
+    Sphere boundingBall = Sphere(ballPos, size * 0.95f);
+
+    /*
     int instances = 2;
-    std::vector<Sphere> bounding_spheres;
-    std::vector<glm::mat4> instanceMatrix;
     for (int i = -instances; i <= instances; i++) {
 
         int t = i * 4;
@@ -262,7 +309,7 @@ int main() {
 
         instanceMatrix.push_back(trans * rot * sca);
         bounding_spheres.emplace_back(tempTranslation, size * 0.595f);
-    }
+    }*/
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
     Model nanosuit_model(glm::vec3(0.0f, -0.5, -5), glm::vec3(mscale), false);
@@ -274,8 +321,14 @@ int main() {
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
-    Model spheres(lightPos, glm::vec3(lscale * 0.1), true, instanceMatrix.size(), instanceMatrix);
+    Model ball(ballPos, glm::vec3(size), true);
+    ball.loadModel("uvsphere/uvsphere.obj");
+
+    /*
+
+    spheres = Model(lightPos, glm::vec3(lscale * 0.1), true, instanceMatrix.size(), instanceMatrix);
     spheres.loadModel("uvsphere/uvsphere.obj");
+     */
 
 
     // Frame Rectangle
@@ -376,7 +429,17 @@ int main() {
         lightPos.y = rheight * (time * speed);
 
 
+        // Intersect with ball
+        bool intersected = false;
+        glm::highp_f32vec3 intersect, normal;
+        Ray ray = camera.getClickDir(int(xpos), int(ypos), width, height);
+        if (boundingBall.get_intersection(ray, intersect, normal)) {
+            intersected = true;
+            glm::highp_f32vec4 posIntersect = glm::inverse(ballModel) * glm::highp_f32vec4(intersect, 1.0f);
+            printf("Intersected Sphere at (%f, %f, %f)\n", intersect.x, intersect.y, intersect.z);
+        }
 
+        /*
         glm::highp_f32vec3 intersect, normal;
         int idSphere = -1;
         bool intersected = false;
@@ -385,11 +448,12 @@ int main() {
             if (bounding_spheres[f].get_intersection(ray, intersect, normal)) {
                 intersected = true;
                 glm::highp_f32vec4 posIntersect = glm::inverse(instanceMatrix[f]) * glm::highp_f32vec4(intersect, 1.0f);
-                printf("Intersected Sphere %d at (%f, %f, %f)\n", f, ray.point.x, ray.point.y, ray.point.z);
+                printf("Intersected Sphere %d at (%f, %f, %f)\n", f, intersect.x, intersect.y, intersect.z);
                 printf("Intersected Sphere %d\n", f);
                 idSphere = f;
             }
         }
+        */
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
 
@@ -483,6 +547,27 @@ int main() {
 
         glCheckError(); glClearError();
 
+        // Drawing Ball
+        ballshader.Activate();
+
+        // Settings Light uniforms
+        ballshader.SetVec3("lightPos", lightPos);
+        ballshader.SetVec4("lightColor", lightColor);
+        ballshader.SetFloat("ambientStrength", ambientStrength);
+        ballshader.SetFloat("specularStrength", specularStrength);
+        ballshader.SetFloat("fadeOff", fadeOff);
+
+        // Settings Model uniforms
+        ballshader.SetMat4("model", ballModel);
+        ballshader.SetMat4("view", camera.view);
+        ballshader.SetMat4("projection", camera.projection);
+        ballshader.SetVec3("cameraPos", camera.P);
+        ballshader.SetFloat("far", camera.far);
+        ballshader.SetFloat("near", camera.near);
+        ball.Draw(ballshader);
+
+        glCheckError(); glClearError();
+
         // Drawing Nanosuit Model
         glm::mat4 model(1.0f);
         model = glm::translate(model, nanosuit_model.pos);
@@ -517,14 +602,17 @@ int main() {
             else
                 pts = points;
             MLine mline(pts);
+            mline.setMVP(glm::mat4(1.0f));
             mline.setup();
             mline.draw();
         }
-
+        if (intersected)
+            addSphereInstance(intersect, normal, defaultBallScale, defaultDrawHeight);
         if (polling_points) {
-            if (useSpheres && idSphere != -1)
-                renderLinesOnSphere(intersected, bounding_spheres[idSphere], camera, glm::normalize(normal), instanceMatrix[idSphere]);
-            else if (!useSpheres)
+            intersectStates.push_back(intersected);
+            if (useSpheres)
+                renderLinesOnSphere(intersected, boundingBall, camera, intersect, normal, ballModel);
+            else
                 renderLines(intersected);
         }
 
@@ -610,6 +698,19 @@ int main() {
         ImGui::Text("model settings");
         ImGui::SliderFloat3("position", &nanosuit_model.pos[0], -100, 100);
         ImGui::SliderFloat("scale", &mscale, 0.0f, 5.0f);
+
+        ImGui::Text("Spheres settings");
+        ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 1.0f);
+        auto olddefaultDrawHeight = defaultDrawHeight;
+        ImGui::SliderFloat("default Scale", &defaultDrawHeight, 0.0f, 3.0f);
+        if (olddefaultDrawHeight != defaultDrawHeight)
+        {
+            updateSphereInstances(glm::vec3(0.0f), defaultBallScale);
+        }
+        if (ImGui::Button("Update Instances")) {
+            updateSphereInstances(glm::vec3(0.0f), defaultBallScale);
+        }
+
         ImGui::End();
 
         ImGui::Begin("Camera Settings");
@@ -663,10 +764,12 @@ int main() {
     uvsphere_shader.Delete();
     plane_shader.Delete();
     framebuffershader.Delete();
+    ballshader.Delete();
     spheres_shader.Delete();
     // shadowShader.Delete();
 
     plane.Delete();
+    ball.Delete();
     nanosuit_model.Delete();
     uv_sphere.Delete();
     spheres.Delete();
@@ -709,6 +812,8 @@ void input(Camera& camera) {
         points_buffer.clear();
         points.clear();
         intersected_points.clear();
+        instanceMatrix.clear();
+        bounding_spheres.clear();
     }
 
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -747,6 +852,14 @@ void input(Camera& camera) {
         useSpheres = !useSpheres;
         std::cout << "useSpheres : " << useSpheres << std::endl;
     }
+    if(!active_mouse && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS)
+    {
+        polling_points = false;
+        showIntersected = false;
+        useSpheres = false;
+        updateSphereInstances(glm::vec3(0.0f), 1.5);
+        std::cout << "useSpheres : " << useSpheres << std::endl;
+    }
 }
 
 void renderLines(bool intersect)
@@ -775,11 +888,11 @@ void renderLines(bool intersect)
             float h = height;
 
             // convert 3d world space position 2d screen space position
-            x1 = 2*x1 / w - 1;
-            y1 = 2*y1 / h - 1;
+            x1 = 2 * x1 / w - 1;
+            y1 = 2 * y1 / h - 1;
 
-            x2 = 2*x2 / w - 1;
-            y2 = 2*y2 / h - 1;
+            x2 = 2 * x2 / w - 1;
+            y2 = 2 * y2 / h - 1;
 
             start.x = x1;
             start.y = y1;
@@ -808,10 +921,12 @@ void renderLines(bool intersect)
     std::cout << "Total Points : " << points_buffer.size() << std::endl;
 }
 
-void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 normal,  glm::mat4 transform)
+void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model)
 {
-    glm::vec4 start = glm::vec4(sp.center + normal * (sp.radius * 1.5f), 1.0f);
-    glm::vec4 end = glm::vec4(sp.center + normal * (sp.radius * 4.f), 1.0f);
+    glm::vec4 start = glm::vec4(hitPos, 1.0f);
+    glm::vec4 end = glm::vec4(hitPos + hitNormal * 0.5f, 1.0f);
+    start = cam.projection * cam.view * model * start;
+    end = cam.projection * cam.view * model * end;
 
     if (intersect)
     {
@@ -830,4 +945,30 @@ void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 norma
         intersected_points.push_back(end.z);
     }
     std::cout << "Total Points : " << points.size() << std::endl;
+}
+
+void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size, float distance)
+{
+    if (intersected_points.size() < 2)
+        return;
+    bool OnOff = intersectStates[intersectStates.size() - 1];
+    bool prevOnOff = intersectStates[intersectStates.size() - 2];
+    if (OnOff != prevOnOff)
+        switch_front_back *= -1;
+    glm::vec4 pos = glm::vec4(hitPos + hitNormal * distance, 1.0f);
+    pos.z *= switch_front_back;
+    glm::vec3 tempTranslation = pos;
+    glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    glm::vec3 tempScale = glm::vec3(size, size, size);
+
+    glm::mat4 trans = glm::mat4(1.0f);
+    glm::mat4 rot = glm::mat4(1.0f);
+    glm::mat4 sca = glm::mat4(1.0f);
+
+    trans = glm::translate(trans, tempTranslation);
+    rot = glm::mat4_cast(tempRotation);
+    sca = glm::scale(sca, tempScale);
+
+    instanceMatrix.push_back(trans * rot * sca);
+    bounding_spheres.emplace_back(tempTranslation, size * 0.595f);
 }
