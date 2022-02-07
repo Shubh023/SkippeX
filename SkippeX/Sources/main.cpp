@@ -76,7 +76,8 @@ int switch_front_back = -1.f;
 std::vector<glm::vec3> points_buffer;
 std::vector<float> points;
 std::vector<float> intersected_points;
-std::vector<bool> intersectStates;
+std::vector<float> intersectStates;
+std::vector<float> intersectSwitches;
 std::vector<Sphere> bounding_spheres;
 std::vector<glm::mat4> instanceMatrix;
 Model spheres;
@@ -85,11 +86,11 @@ void renderLines(bool intersect);
 void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
 void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size=0.1f, float distance=0.5f);
 
-void updateSphereInstances(glm::vec3 pos, float size=0.1)
+void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
 {
     for (int i = 0; i < instanceMatrix.size(); i++)
     {
-        glm::vec3 tempTranslation = bounding_spheres[i].center;
+        glm::vec3 tempTranslation = bounding_spheres[i].center * height;
         glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 tempScale = glm::vec3(size, size, size);
 
@@ -252,7 +253,7 @@ int main() {
 
     // Plane Variables
     glm::vec4 planeColor = glm::vec4(1.0f);
-    glm::vec3 planePos = glm::vec3(0.0f, -0.25f, 0.0f);
+    glm::vec3 planePos = glm::vec3(0.0f, -1.f, 0.0f);
     glm::mat4 plane_model = glm::mat4(1.0f);
     glm::vec3 rotate_plane(0.f, 90.f, 0.f);
     plane_model = glm::translate(plane_model, planePos);
@@ -261,9 +262,8 @@ int main() {
     std::vector<float> x_data(100, 0);
     std::vector<float> y_data(100, 0);
     std::vector<float> z_data(100, 0);
-    std::vector<float> t_data(100, 100);
+    std::vector<float> t_data;
     std::vector<float> fps_values(100, 0);
-    std::iota(t_data.begin(), t_data.end(), 0);
 
     // Lighting Variables
     glm::vec4 lightColor = glm::vec4(1.0f);
@@ -271,9 +271,9 @@ int main() {
     glm::mat4 lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
-    glm::vec3 ballPos = glm::vec3 (0, 1, 1);
+    glm::vec3 ballPos = glm::vec3 (0, 0, 0);
     glm::quat ballRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-    auto size = 2.f;
+    auto size = 1.f;
     glm::vec3 ballScale = glm::vec3(size, size, size);
 
     glm::mat4 trans = glm::mat4(1.0f);
@@ -285,7 +285,7 @@ int main() {
     sca = glm::scale(sca, ballScale);
 
     glm::mat4 ballModel= trans * rot * sca;
-    Sphere boundingBall = Sphere(ballPos, size * 0.95f);
+    Sphere boundingBall = Sphere(ballPos, size * 0.50f);
 
     /*
     int instances = 2;
@@ -312,7 +312,7 @@ int main() {
     }*/
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
-    Model nanosuit_model(glm::vec3(0.0f, -0.5, -5), glm::vec3(mscale), false);
+    Model nanosuit_model(glm::vec3(0.0f, -1, -10), glm::vec3(mscale), false);
     nanosuit_model.loadModel("nanosuit/nanosuit.obj");
 
     Model plane(planePos, glm::vec3(plscale), false);
@@ -402,6 +402,7 @@ int main() {
 
         double t_now = glfwGetTime();
         double time = t_now - t_start;
+        t_data.push_back(t_now);
 
         glClearError();
 
@@ -609,7 +610,8 @@ int main() {
         if (intersected)
             addSphereInstance(intersect, normal, defaultBallScale, defaultDrawHeight);
         if (polling_points) {
-            intersectStates.push_back(intersected);
+            intersectStates.push_back(int(intersected));
+            intersectSwitches.push_back(switch_front_back);
             if (useSpheres)
                 renderLinesOnSphere(intersected, boundingBall, camera, intersect, normal, ballModel);
             else
@@ -700,15 +702,16 @@ int main() {
         ImGui::SliderFloat("scale", &mscale, 0.0f, 5.0f);
 
         ImGui::Text("Spheres settings");
-        ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 1.0f);
         auto olddefaultDrawHeight = defaultDrawHeight;
-        ImGui::SliderFloat("default Scale", &defaultDrawHeight, 0.0f, 3.0f);
-        if (olddefaultDrawHeight != defaultDrawHeight)
+        auto olddefaultBallScale = defaultBallScale;
+        ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 1.0f);
+        ImGui::SliderFloat("default Height", &defaultDrawHeight, 0.0f, 3.0f);
+        if (olddefaultDrawHeight != defaultDrawHeight || olddefaultBallScale != defaultBallScale)
         {
-            updateSphereInstances(glm::vec3(0.0f), defaultBallScale);
+            updateSphereInstances(glm::vec3(0.0f), defaultBallScale, defaultDrawHeight);
         }
         if (ImGui::Button("Update Instances")) {
-            updateSphereInstances(glm::vec3(0.0f), defaultBallScale);
+            updateSphereInstances(glm::vec3(0.0f), defaultBallScale, defaultDrawHeight);
         }
 
         ImGui::End();
@@ -743,11 +746,15 @@ int main() {
             camera.O = glm::vec3(0.0f, 0.0f, -1.0f);
         ImGui::End();
 
-        ImGui::Begin("My Window");
-        if (ImPlot::BeginPlot("My Plot")) {
+        ImGui::Begin("Plots Window");
+        if (ImPlot::BeginPlot("Evolutions of ")) {
             ImPlot::PlotLine("My Line 1", &t_data[0], &x_data[0], x_data.size());
             ImPlot::PlotLine("My Line 2", &t_data[0], &y_data[0], y_data.size());
-            ImPlot::PlotLine("My Line 3", &t_data[0], &z_data[0], z_data.size());
+            ImPlot::EndPlot();
+        }
+        if (ImPlot::BeginPlot("My Plot")) {
+            ImPlot::PlotLine("States", &t_data[0], &intersectStates[0], intersectStates.size());
+            ImPlot::PlotLine("SwitchesOnOff", &t_data[0], &intersectSwitches[0], intersectSwitches.size());
             ImPlot::EndPlot();
         }
         ImGui::End();
@@ -814,6 +821,8 @@ void input(Camera& camera) {
         intersected_points.clear();
         instanceMatrix.clear();
         bounding_spheres.clear();
+        intersectStates.clear();
+        intersectSwitches.clear();
     }
 
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -956,7 +965,8 @@ void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size, float 
     if (OnOff != prevOnOff)
         switch_front_back *= -1;
     glm::vec4 pos = glm::vec4(hitPos + hitNormal * distance, 1.0f);
-    pos.z *= switch_front_back;
+    pos *= switch_front_back;
+
     glm::vec3 tempTranslation = pos;
     glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     glm::vec3 tempScale = glm::vec3(size, size, size);
