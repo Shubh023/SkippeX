@@ -6,6 +6,7 @@
 #include "Model.hpp"
 #include "Camera.hpp"
 #include "Object.hpp"
+#include "Spline.hpp"
 
 // System Headers
 // ImGui
@@ -83,7 +84,9 @@ std::vector<float> intersectSwitches;
 std::vector<Sphere> bounding_spheres;
 std::vector<glm::mat4> instanceMatrix;
 Model spheres;
+Curve* curve;
 std::vector<sObject> boundingObjects;
+bool useInterpolated = true;
 
 void renderLines(bool intersect);
 void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
@@ -108,17 +111,61 @@ void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
 
         instanceMatrix[i] = trans * rot * sca;
     }
-    // Creating a Spline in C++ by adding more balls
-    /*
-    int interpolation_samples = 5;
-    for (int i = 0; i < instanceMatrix.size(); i++)
+    curve = new BSpline();
+    curve->set_steps(5);
+    for (int i = 0; i < bounding_spheres.size(); i++)
+        curve->add_way_point(bounding_spheres[i].origin * height);
+
+    for (int i = 0; i < curve->node_count(); i++)
     {
-        for (int s = 0; s < interpolation_samples; s++)
-            interpolated_instanceMatrix.push_back(instanceMatrix[i]);
+        glm::vec3 tempTranslation = curve->node(i) ;
+        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 tempScale = glm::vec3(size, size, size);
+
+        glm::mat4 trans = glm::mat4(1.0f);
+        glm::mat4 rot = glm::mat4(1.0f);
+        glm::mat4 sca = glm::mat4(1.0f);
+
+        trans = glm::translate(trans, tempTranslation);
+        rot = glm::mat4_cast(tempRotation);
+        sca = glm::scale(sca, tempScale);
+
+        interpolated_instanceMatrix.push_back(trans * rot * sca);
     }
-     */
-    spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
-    spheres.loadModel("uvsphere/uvsphere.obj");
+    if (useInterpolated)
+    {
+        spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(), interpolated_instanceMatrix);
+        spheres.loadModel("uvsphere/uvsphere.obj");
+    }
+    else
+    {
+        spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
+        spheres.loadModel("uvsphere/uvsphere.obj");
+    }
+
+}
+
+void replayCamWithDrawing(Camera& cam)
+{
+    if (curve->is_empty())
+    {
+        std::cout << "Empty Curve" << std::endl;
+        return;
+    }
+    cam.positions.clear();
+    cam.orientations.clear();
+
+    Curve* detailed_curve = new BSpline();
+    detailed_curve->set_steps(20);
+    for (int i = 0; i < curve->node_count(); i++)
+        detailed_curve->add_way_point(curve->node(i));
+
+    for (int i = 0; i < detailed_curve->node_count() - 1; i++) {
+        auto currPos = detailed_curve->node(i);
+        auto nextPos = detailed_curve->node(i + 1);
+        cam.positions.push_back(currPos);
+        cam.orientations.push_back(glm::normalize(nextPos - currPos));
+    }
 }
 
 int main() {
@@ -211,7 +258,7 @@ int main() {
     }
 
     // Define Camera
-    Camera camera(width, height, glm::vec3(0.0f, 4.5f, 7.5f), 0.25, 65.f);
+    Camera camera(width, height, glm::vec3(0.0f, 0.5f, 4.5f), 0.25, 65.f);
 
     // Define Shaders
     LinkedShader nanosuit_shader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "model.vert"),
@@ -260,6 +307,8 @@ int main() {
     float specularStrength = 0.5f;
     float fadeOff = 70.0f;
     bool replay = false;
+    float replaySpeed = 1.f;
+    bool replayWithDrawing = false;
     int replay_ind = 0;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
@@ -340,13 +389,6 @@ int main() {
 
     Model ball(ballPos, glm::vec3(size), true);
     ball.loadModel("uvsphere/uvsphere.obj");
-
-    /*
-
-    spheres = Model(lightPos, glm::vec3(lscale * 0.1), true, instanceMatrix.size(), instanceMatrix);
-    spheres.loadModel("uvsphere/uvsphere.obj");
-     */
-
 
     // Frame Rectangle
     unsigned int rectVAO, rectVBO;
@@ -431,13 +473,17 @@ int main() {
         if (camera.capture)
         {
             replay = false;
+            replayWithDrawing = false;
+            polling_points = false;
         }
-        if (replay) {
-            replay_ind += 1;
-            if (replay_ind >= camera.positions.size())
-                replay_ind = 0;
-            camera.P = camera.positions[replay_ind];
-            camera.O = camera.orientations[replay_ind];
+        if (camera.positions.size() > 5) {
+            if (replay or replayWithDrawing) {
+                replay_ind += int(replaySpeed);
+                if (replay_ind >= camera.positions.size())
+                    replay_ind = 0;
+                camera.P = camera.positions[replay_ind];
+                camera.O = camera.orientations[replay_ind];
+            }
         }
 
         camera.update(fovDeg, 0.1f, 500.0f);
@@ -565,25 +611,26 @@ int main() {
 
         glCheckError(); glClearError();
 
-        // Drawing spheres instances
-        spheres_shader.Activate();
+        if (not replayWithDrawing) {
+            // Drawing spheres instances
+            spheres_shader.Activate();
 
-        // Settings Light uniforms
-        spheres_shader.SetVec3("lightPos", lightPos);
-        spheres_shader.SetVec4("lightColor", lightColor);
-        spheres_shader.SetFloat("ambientStrength", ambientStrength);
-        spheres_shader.SetFloat("specularStrength", specularStrength);
-        spheres_shader.SetFloat("fadeOff", fadeOff);
+            // Settings Light uniforms
+            spheres_shader.SetVec3("lightPos", lightPos);
+            spheres_shader.SetVec4("lightColor", lightColor);
+            spheres_shader.SetFloat("ambientStrength", ambientStrength);
+            spheres_shader.SetFloat("specularStrength", specularStrength);
+            spheres_shader.SetFloat("fadeOff", fadeOff);
 
-        // Settings Model uniforms
-        spheres_shader.SetMat4("view", camera.view);
-        spheres_shader.SetMat4("projection", camera.projection);
-        spheres_shader.SetVec3("cameraPos", camera.P);
-        spheres_shader.SetFloat("far", camera.far);
-        spheres_shader.SetFloat("near", camera.near);
-        spheres_shader.SetVec4("Ucolor", glm::vec4(1.0f));
-        spheres.Draw(spheres_shader);
-
+            // Settings Model uniforms
+            spheres_shader.SetMat4("view", camera.view);
+            spheres_shader.SetMat4("projection", camera.projection);
+            spheres_shader.SetVec3("cameraPos", camera.P);
+            spheres_shader.SetFloat("far", camera.far);
+            spheres_shader.SetFloat("near", camera.near);
+            spheres_shader.SetVec4("Ucolor", glm::vec4(1.0f));
+            spheres.Draw(spheres_shader);
+        }
         glCheckError(); glClearError();
 
         // Drawing Ball
@@ -645,9 +692,10 @@ int main() {
             mline.setup();
             mline.draw();
         }
-        if (intersected)
-            addSphereInstance(intersect, normal, defaultBallScale, defaultDrawHeight);
+
         if (polling_points) {
+            if (intersected)
+                addSphereInstance(intersect, normal, defaultBallScale, defaultDrawHeight);
             intersectStates.push_back(int(intersected));
             intersectSwitches.push_back(switch_front_back);
             if (useSpheres)
@@ -766,15 +814,21 @@ int main() {
         ImGui::Checkbox("Capture", &camera.capture);
         ImGui::Checkbox("Capture Cursor", &leftMouse);
         ImGui::Checkbox("Replay", &replay);
+        ImGui::SliderFloat("replaySpeed", &replaySpeed, 1.f, 100.f);
+        ImGui::Checkbox("Replay With Drawing", &replayWithDrawing);
 
-        if (replay)
+        if (replay or replayWithDrawing)
             active_mouse = false;
+
+        if (replayWithDrawing)
+            replayCamWithDrawing(camera);
 
         if (ImGui::Button("reset capture")) {
             camera.positions.clear();
             camera.orientations.clear();
             replay_ind = 0;
             replay = false;
+            replayWithDrawing = false;
         }
 
         if (ImGui::Button("reset position"))
@@ -904,7 +958,7 @@ void input(Camera& camera) {
         polling_points = false;
         showIntersected = false;
         useSpheres = false;
-        updateSphereInstances(glm::vec3(0.0f), 1.5);
+        updateSphereInstances(glm::vec3(0.0f), 0.05f);
         std::cout << "useSpheres : " << useSpheres << std::endl;
     }
 }
