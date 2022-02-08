@@ -14,6 +14,7 @@ uniform vec3 cameraPos;
 uniform mat4 view;
 uniform mat4 projection;
 uniform float noTexCoords;
+uniform int noTex;
 
 void main( )
 {
@@ -22,5 +23,8 @@ void main( )
 	TexCoords = aTexCoord;
 	FragPos = vec3(instanceMatrix * vec4(aPos, 1.0)); // Vertex in world space
 	FragColor = aColor;
-	Normal = inverse(transpose(mat3(instanceMatrix))) * aNormal; // Normal in world space
+	if (noTex == 1)
+		Normal = vec3(1.0f);
+	else
+		Normal = inverse(transpose(mat3(instanceMatrix))) * aNormal; // Normal in world space
 }

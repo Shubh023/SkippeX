@@ -84,7 +84,8 @@ std::vector<float> intersectSwitches;
 std::vector<Sphere> bounding_spheres;
 std::vector<glm::mat4> instanceMatrix;
 Model spheres;
-Curve* curve;
+Curve* curve = nullptr;
+Curve* detailed_curve = nullptr;
 std::vector<sObject> boundingObjects;
 bool useInterpolated = true;
 
@@ -112,7 +113,7 @@ void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
         instanceMatrix[i] = trans * rot * sca;
     }
     curve = new BSpline();
-    curve->set_steps(5);
+    curve->set_steps(25);
     for (int i = 0; i < bounding_spheres.size(); i++)
         curve->add_way_point(bounding_spheres[i].origin * height);
 
@@ -156,16 +157,29 @@ void replayCamWithDrawing(Camera& cam)
     cam.positions.clear();
     cam.orientations.clear();
 
-    Curve* detailed_curve = new BSpline();
-    detailed_curve->set_steps(20);
+    Curve *detailed_curve = new BSpline();
+    detailed_curve->set_steps(35);
     for (int i = 0; i < curve->node_count(); i++)
         detailed_curve->add_way_point(curve->node(i));
 
-    for (int i = 0; i < detailed_curve->node_count() - 1; i++) {
+    int N = 10;
+    for (int i = N; i < detailed_curve->node_count() - N; i++) {
         auto currPos = detailed_curve->node(i);
         auto nextPos = detailed_curve->node(i + 1);
-        cam.positions.push_back(currPos);
-        cam.orientations.push_back(glm::normalize(nextPos - currPos));
+
+        glm::vec3 avg_orientation = glm::normalize(nextPos - currPos);
+        glm::vec3 avg_pos = currPos;
+        for (int j = -N; j < N - 1; j++) {
+            avg_orientation += glm::normalize(detailed_curve->node(i - j) - detailed_curve->node(j));
+            avg_pos += detailed_curve->node(j);
+        }
+        avg_orientation /= float(N);
+        avg_pos /= float(N);
+
+        if (!glm::any(glm::isnan(avg_pos)) or !glm::any(glm::isnan(avg_orientation))) {
+            cam.positions.push_back(avg_pos);
+            cam.orientations.push_back(glm::normalize(avg_orientation));
+        }
     }
 }
 
@@ -835,13 +849,15 @@ int main() {
         ImGui::Checkbox("Capture Cursor", &leftMouse);
         ImGui::Checkbox("Replay", &replay);
         ImGui::SliderFloat("replaySpeed", &replaySpeed, 1.f, 100.f);
-        ImGui::Checkbox("Replay With Drawing", &replayWithDrawing);
+        // ImGui::Checkbox("Replay With Drawing", &replayWithDrawing);
 
         if (replay or replayWithDrawing)
             active_mouse = false;
 
-        if (replayWithDrawing)
+        if (ImGui::Button("replayCamWithDrawing")) {
+            replayWithDrawing = true;
             replayCamWithDrawing(camera);
+        }
 
         if (ImGui::Button("reset capture")) {
             camera.positions.clear();
