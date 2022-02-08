@@ -36,7 +36,7 @@ public:
     explicit Object(const glm::vec3& v, std::string type) : origin(v), type(type)
     {};
 
-    virtual bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, float t) const = 0;
+    virtual bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, glm::vec2& t_val) const = 0;
 
     glm::vec3 origin;
     std::string type;
@@ -52,9 +52,9 @@ public:
     Sphere(glm::vec3 p, float r) :
             Object(p, "Sphere"), radius(r)
     {};
-    bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, float t_val) const override
+    bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, glm::vec2& t_val) const override
     {
-        float t0, t1;
+        float t0 = 0.f, t1 = 0.f;
         // geometric solution
         glm::highp_f32vec3 L = origin - ray.point;
         float tca = glm::dot(L, ray.dir);
@@ -66,20 +66,24 @@ public:
         t0 = tca - thc;
         t1 = tca + thc;
 
-        if (t0 > t1) std::swap(t0, t1);
+        if (t0 > t1)
+            std::swap(t0, t1);
 
         if (t0 < 0) {
             t0 = t1;
-            if (t0 < 0) return false;
+            if (t0 < 0)
+                return false;
         }
 
         float t = t0;
+        t_val[0] = t0;
+        t_val[1] = t1;
         point = ray.get_sample(t);
 
         normal = glm::highp_f32vec3(point.x - origin.x, point.y - origin.y, point.z - origin.z);
         normal = glm::normalize(normal);
 
-        t_val = t;
+
         return true;
     }
 };
@@ -95,7 +99,7 @@ public:
             Object(p, "Plane"), normal(n), maxDist(distmax)
     {};
 
-    bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, float t_val) const override {
+    bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, glm::vec2& t_val) const override {
         float denom = glm::dot(normal, ray.dir);
         float t;
         if (denom > float(1e-6)) {
@@ -114,7 +118,8 @@ public:
         normal = glm::highp_f32vec3(point.x - origin.x, point.y - origin.y, point.z - origin.z);
         normal = glm::normalize(normal);
 
-        t_val = t;
+        t_val[0] = t;
+        t_val[1] = t;
         return true;
     };
 };

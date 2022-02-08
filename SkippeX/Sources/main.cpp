@@ -90,7 +90,7 @@ bool useInterpolated = true;
 
 void renderLines(bool intersect);
 void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
-void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size=0.1f, float distance=0.5f);
+void addSphereInstance(Ray ray, glm::vec2 t_vals, float size=0.1f, float distance=0.5f);
 
 void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
 {
@@ -137,6 +137,7 @@ void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
         spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(), interpolated_instanceMatrix);
         spheres.loadModel("uvsphere/uvsphere.obj");
     }
+
     else
     {
         spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
@@ -315,7 +316,7 @@ int main() {
 
     // Plane Variables
     glm::vec4 planeColor = glm::vec4(1.0f);
-    glm::vec3 planePos = glm::vec3(0.0f, -1.f, 0.0f);
+    glm::vec3 planePos = glm::vec3(0.0f, -4.f, 0.0f);
     glm::mat4 plane_model = glm::mat4(1.0f);
     glm::vec3 rotate_plane(0.f, 90.f, 0.f);
     plane_model = glm::translate(plane_model, planePos);
@@ -378,7 +379,7 @@ int main() {
     }*/
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
-    Model nanosuit_model(glm::vec3(0.0f, -1, -10), glm::vec3(mscale), false);
+    Model nanosuit_model(glm::vec3(0.0f, -4.f, -10), glm::vec3(mscale), false);
     nanosuit_model.loadModel("nanosuit/nanosuit.obj");
 
     Model plane(planePos, glm::vec3(plscale), false);
@@ -497,30 +498,49 @@ int main() {
         bool intersected = false;
         glm::highp_f32vec3 intersect, normal;
         float t = std::numeric_limits<float>::max();
+        glm::vec2 t_vals(0.f);
         Object* intersectedObj;
         Ray ray = camera.getClickDir(int(xpos), int(ypos), width, height);
         for (auto obj : boundingObjects) {
-            float curr_t = std::numeric_limits<float>::max();;
+            glm::vec2 curr_t = glm::vec2(std::numeric_limits<float>::max());
             if (obj->get_intersection(ray, intersect, normal, curr_t)) {
+                t_vals[0] = curr_t[0];
+                t_vals[1] = curr_t[1];
                 intersected = true;
-                if (curr_t <= t) {
-                    t = curr_t;
-                    intersectedObj = obj.get();
+                intersectedObj = obj.get();
+
+                /*
+                if (switch_front_back == 1) {
+                    if (curr_t[0] <= t) {
+                        t = curr_t[0];
+                        intersectedObj = obj.get();
+                    }
                 }
+                else if (switch_front_back = -1) {
+                    if (curr_t[1] <= t) {
+                        t = curr_t[1];
+                        intersectedObj = obj.get();
+                        auto intersect = ray.get_sample(curr_t[1]);
+                        normal = glm::highp_f32vec3(intersect.x - obj->origin.x, intersect.y - obj->origin.y, intersect.z - obj->origin.z);
+                        normal = glm::normalize(normal);
+                    }
+                }
+                 */
             }
         }
+
         glm::mat4 intersectedModel;
         if (intersected) {
             if (intersectedObj->type == "Sphere") {
                 glm::highp_f32vec4 posIntersect = glm::inverse(bBallModel) * glm::highp_f32vec4(intersect, 1.0f);
-                printf("Intersected %s at (%f, %f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
-                       intersect.z);
+                printf("Intersected %s at (%f, %f, %f) for t(%f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
+                       intersect.z, t_vals[0], t_vals[1]);
                 intersectedModel = bBallModel;
             }
             else if (intersectedObj->type == "Plane") {
                 glm::highp_f32vec4 posIntersect = glm::inverse(bPlaneModel) * glm::highp_f32vec4(intersect, 1.0f);
-                printf("Intersected %s at (%f, %f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
-                       intersect.z);
+                printf("Intersected %s at (%f, %f, %f) for t(%f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
+                       intersect.z, t_vals[0], t_vals[1]);
                 intersectedModel = bPlaneModel;
             }
         }
@@ -695,7 +715,7 @@ int main() {
 
         if (polling_points) {
             if (intersected)
-                addSphereInstance(intersect, normal, defaultBallScale, defaultDrawHeight);
+                addSphereInstance(ray, t_vals, defaultBallScale, defaultDrawHeight);
             intersectStates.push_back(int(intersected));
             intersectSwitches.push_back(switch_front_back);
             if (useSpheres)
@@ -1048,7 +1068,7 @@ void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec
     std::cout << "Total Points : " << points.size() << std::endl;
 }
 
-void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size, float distance)
+void addSphereInstance(Ray ray, glm::vec2 t_vals, float size, float distance)
 {
     if (intersected_points.size() < 2)
         return;
@@ -1056,9 +1076,11 @@ void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size, float 
     bool prevOnOff = intersectStates[intersectStates.size() - 2];
     if (OnOff != prevOnOff)
         switch_front_back *= -1;
-    glm::vec4 pos = glm::vec4(hitPos + hitNormal * distance, 1.0f);
-    pos *= switch_front_back;
-
+    glm::vec4 pos;
+    if (switch_front_back == 1)
+        pos = glm::vec4(ray.get_sample(t_vals[0] - distance), 1.0f);
+    else if (switch_front_back == -1)
+        pos = glm::vec4(ray.get_sample(t_vals[1] + distance), 1.0f);
     glm::vec3 tempTranslation = pos;
     glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     glm::vec3 tempScale = glm::vec3(size, size, size);
