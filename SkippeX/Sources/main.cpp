@@ -5,6 +5,7 @@
 #include "Mesh.hpp"
 #include "Model.hpp"
 #include "Camera.hpp"
+#include "Object.hpp"
 
 // System Headers
 // ImGui
@@ -27,7 +28,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <cmath>
-#include <numeric>
+#include <memory>
+#include <limits>
 
 // Define Useful Variables and macros
 #define VSYNC GL_TRUE
@@ -81,16 +83,18 @@ std::vector<float> intersectSwitches;
 std::vector<Sphere> bounding_spheres;
 std::vector<glm::mat4> instanceMatrix;
 Model spheres;
+std::vector<sObject> boundingObjects;
 
 void renderLines(bool intersect);
-void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
+void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
 void addSphereInstance(glm::vec3 hitPos, glm::vec3 hitNormal, float size=0.1f, float distance=0.5f);
 
 void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
 {
+    std::vector<glm::mat4> interpolated_instanceMatrix;
     for (int i = 0; i < instanceMatrix.size(); i++)
     {
-        glm::vec3 tempTranslation = bounding_spheres[i].center * height;
+        glm::vec3 tempTranslation = bounding_spheres[i].origin * height;
         glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 tempScale = glm::vec3(size, size, size);
 
@@ -104,6 +108,15 @@ void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
 
         instanceMatrix[i] = trans * rot * sca;
     }
+    // Creating a Spline in C++ by adding more balls
+    /*
+    int interpolation_samples = 5;
+    for (int i = 0; i < instanceMatrix.size(); i++)
+    {
+        for (int s = 0; s < interpolation_samples; s++)
+            interpolated_instanceMatrix.push_back(instanceMatrix[i]);
+    }
+     */
     spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
     spheres.loadModel("uvsphere/uvsphere.obj");
 }
@@ -284,9 +297,13 @@ int main() {
     rot = glm::mat4_cast(ballRotation);
     sca = glm::scale(sca, ballScale);
 
-    glm::mat4 ballModel= trans * rot * sca;
-    Sphere boundingBall = Sphere(ballPos, size * 0.50f);
+    glm::mat4 bBallModel = trans * rot * sca;
+    glm::mat4 bPlaneModel = glm::translate(glm::mat4(1.0f), planePos) * glm::mat4_cast(ballRotation) * glm::mat4(1.0f);
+    auto boundingBall = std::make_shared<Sphere>(ballPos, size * 0.50f);
+    auto boundingPlane = std::make_shared<Plane>(glm::vec3(0.0f), glm::vec3(0.f, 1.0f, 0.f));
 
+    boundingObjects.push_back(boundingBall);
+    //boundingObjects.push_back(boundingPlane);
     /*
     int instances = 2;
     for (int i = -instances; i <= instances; i++) {
@@ -433,11 +450,33 @@ int main() {
         // Intersect with ball
         bool intersected = false;
         glm::highp_f32vec3 intersect, normal;
+        float t = std::numeric_limits<float>::max();
+        Object* intersectedObj;
         Ray ray = camera.getClickDir(int(xpos), int(ypos), width, height);
-        if (boundingBall.get_intersection(ray, intersect, normal)) {
-            intersected = true;
-            glm::highp_f32vec4 posIntersect = glm::inverse(ballModel) * glm::highp_f32vec4(intersect, 1.0f);
-            printf("Intersected Sphere at (%f, %f, %f)\n", intersect.x, intersect.y, intersect.z);
+        for (auto obj : boundingObjects) {
+            float curr_t = std::numeric_limits<float>::max();;
+            if (obj->get_intersection(ray, intersect, normal, curr_t)) {
+                intersected = true;
+                if (curr_t <= t) {
+                    t = curr_t;
+                    intersectedObj = obj.get();
+                }
+            }
+        }
+        glm::mat4 intersectedModel;
+        if (intersected) {
+            if (intersectedObj->type == "Sphere") {
+                glm::highp_f32vec4 posIntersect = glm::inverse(bBallModel) * glm::highp_f32vec4(intersect, 1.0f);
+                printf("Intersected %s at (%f, %f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
+                       intersect.z);
+                intersectedModel = bBallModel;
+            }
+            else if (intersectedObj->type == "Plane") {
+                glm::highp_f32vec4 posIntersect = glm::inverse(bPlaneModel) * glm::highp_f32vec4(intersect, 1.0f);
+                printf("Intersected %s at (%f, %f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
+                       intersect.z);
+                intersectedModel = bPlaneModel;
+            }
         }
 
         /*
@@ -479,7 +518,6 @@ int main() {
         plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.y), glm::vec3(0.0f, 1.0f, 0.0f));
         plane_model = glm::rotate(plane_model, glm::radians(rotate_plane.z), glm::vec3(0.0f, 0.0f, 1.0f));
         plane_model = glm::scale(plane_model, glm::vec3(plscale));
-
         plane_shader.Activate();
 
         // Settings Light uniforms
@@ -559,7 +597,7 @@ int main() {
         ballshader.SetFloat("fadeOff", fadeOff);
 
         // Settings Model uniforms
-        ballshader.SetMat4("model", ballModel);
+        ballshader.SetMat4("model", bBallModel);
         ballshader.SetMat4("view", camera.view);
         ballshader.SetMat4("projection", camera.projection);
         ballshader.SetVec3("cameraPos", camera.P);
@@ -613,7 +651,7 @@ int main() {
             intersectStates.push_back(int(intersected));
             intersectSwitches.push_back(switch_front_back);
             if (useSpheres)
-                renderLinesOnSphere(intersected, boundingBall, camera, intersect, normal, ballModel);
+                renderLinesOnSphere(intersected, camera, intersect, normal, intersectedModel);
             else
                 renderLines(intersected);
         }
@@ -930,7 +968,7 @@ void renderLines(bool intersect)
     std::cout << "Total Points : " << points_buffer.size() << std::endl;
 }
 
-void renderLinesOnSphere(bool intersect, Sphere sp, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model)
+void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model)
 {
     glm::vec4 start = glm::vec4(hitPos, 1.0f);
     glm::vec4 end = glm::vec4(hitPos + hitNormal * 0.5f, 1.0f);
