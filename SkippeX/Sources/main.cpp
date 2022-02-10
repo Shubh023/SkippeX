@@ -112,38 +112,40 @@ void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
 
         instanceMatrix[i] = trans * rot * sca;
     }
-    curve = new BSpline();
-    curve->set_steps(25);
-    for (int i = 0; i < bounding_spheres.size(); i++)
-        curve->add_way_point(bounding_spheres[i].origin * height);
-
-    for (int i = 0; i < curve->node_count(); i++)
-    {
-        glm::vec3 tempTranslation = curve->node(i) ;
-        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        glm::vec3 tempScale = glm::vec3(size, size, size);
-
-        glm::mat4 trans = glm::mat4(1.0f);
-        glm::mat4 rot = glm::mat4(1.0f);
-        glm::mat4 sca = glm::mat4(1.0f);
-
-        trans = glm::translate(trans, tempTranslation);
-        rot = glm::mat4_cast(tempRotation);
-        sca = glm::scale(sca, tempScale);
-
-        interpolated_instanceMatrix.push_back(trans * rot * sca);
-    }
     if (useInterpolated)
     {
-        spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(), interpolated_instanceMatrix);
+        curve = new BSpline();
+        curve->set_steps(25);
+        for (int i = 0; i < bounding_spheres.size(); i++)
+            curve->add_way_point(bounding_spheres[i].origin * height);
+
+        for (int i = 0; i < curve->node_count(); i++) {
+            glm::vec3 tempTranslation = curve->node(i);
+            glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+            glm::vec3 tempScale = glm::vec3(size, size, size);
+
+            glm::mat4 trans = glm::mat4(1.0f);
+            glm::mat4 rot = glm::mat4(1.0f);
+            glm::mat4 sca = glm::mat4(1.0f);
+
+            trans = glm::translate(trans, tempTranslation);
+            rot = glm::mat4_cast(tempRotation);
+            sca = glm::scale(sca, tempScale);
+
+            interpolated_instanceMatrix.push_back(trans * rot * sca);
+
+        }
+        std::cout << "Num of interpolated spheres" << interpolated_instanceMatrix.size() << std::endl;
+        spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(),
+                            interpolated_instanceMatrix);
         spheres.loadModel("uvsphere/uvsphere.obj");
     }
     else
     {
+        std::cout << "Num of spheres" << instanceMatrix.size() << std::endl;
         spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
         spheres.loadModel("uvsphere/uvsphere.obj");
     }
-    std::cout << "Num of spheres" << instanceMatrix.size() << std::endl;
 }
 
 void replayCamWithDrawing(Camera& cam)
@@ -831,7 +833,7 @@ int main() {
         ImGui::Text("Spheres settings");
         auto olddefaultDrawHeight = defaultDrawHeight;
         auto olddefaultBallScale = defaultBallScale;
-        ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 1.0f);
+        ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 0.075f);
         ImGui::SliderFloat("default Height", &defaultDrawHeight, 0.0f, 3.0f);
         if (olddefaultDrawHeight != defaultDrawHeight || olddefaultBallScale != defaultBallScale)
         {
