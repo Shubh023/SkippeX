@@ -83,5 +83,4 @@ void main()
 
     // Combine
     color = intensity * (diffMap * (ambient + diffuse) + specMap * (ambient + specular));
-    // color = depthColor;
 }

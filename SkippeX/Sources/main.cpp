@@ -40,7 +40,7 @@
 int width = 1920;
 int height = 1080;
 float fovDeg = 60.f;
-unsigned int samples = 4;
+unsigned int samples = 8;
 double xpos, ypos;
 bool leftMouse = false;
 
@@ -87,7 +87,7 @@ Model spheres;
 Curve* curve = nullptr;
 Curve* detailed_curve = nullptr;
 std::vector<sObject> boundingObjects;
-bool useInterpolated = true;
+bool useInterpolated = false;
 
 void renderLines(bool intersect);
 void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
@@ -138,13 +138,12 @@ void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
         spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(), interpolated_instanceMatrix);
         spheres.loadModel("uvsphere/uvsphere.obj");
     }
-
     else
     {
         spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
         spheres.loadModel("uvsphere/uvsphere.obj");
     }
-
+    std::cout << "Num of spheres" << instanceMatrix.size() << std::endl;
 }
 
 void replayCamWithDrawing(Camera& cam)
@@ -324,6 +323,7 @@ int main() {
     bool replay = false;
     float replaySpeed = 1.f;
     bool replayWithDrawing = false;
+    bool noShading = true;
     int replay_ind = 0;
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.25f, 1.0f);
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
@@ -606,6 +606,7 @@ int main() {
         plane_shader.SetFloat("ambientStrength", ambientStrength);
         plane_shader.SetFloat("specularStrength", specularStrength);
         plane_shader.SetFloat("fadeOff", fadeOff);
+        plane_shader.SetInt("noShading", 0);
 
         // Settings Model uniforms
         plane_shader.SetMat4("model", plane_model);
@@ -633,6 +634,7 @@ int main() {
         uvsphere_shader.SetFloat("ambientStrength", ambientStrength);
         uvsphere_shader.SetFloat("specularStrength", specularStrength);
         uvsphere_shader.SetFloat("fadeOff", fadeOff);
+        uvsphere_shader.SetInt("noShading", 0);
 
         // Settings Model uniforms
         uvsphere_shader.SetMat4("model", lightModel);
@@ -652,6 +654,10 @@ int main() {
             // Settings Light uniforms
             spheres_shader.SetVec3("lightPos", lightPos);
             spheres_shader.SetVec4("lightColor", lightColor);
+            if (noShading)
+                spheres_shader.SetInt("noShading", 1);
+            else
+                spheres_shader.SetInt("noShading", 0);
             spheres_shader.SetFloat("ambientStrength", ambientStrength);
             spheres_shader.SetFloat("specularStrength", specularStrength);
             spheres_shader.SetFloat("fadeOff", fadeOff);
@@ -676,6 +682,7 @@ int main() {
         ballshader.SetFloat("ambientStrength", ambientStrength);
         ballshader.SetFloat("specularStrength", specularStrength);
         ballshader.SetFloat("fadeOff", fadeOff);
+        ballshader.SetInt("noShading", 0);
 
         // Settings Model uniforms
         ballshader.SetMat4("model", bBallModel);
@@ -833,6 +840,8 @@ int main() {
         if (ImGui::Button("Update Instances")) {
             updateSphereInstances(glm::vec3(0.0f), defaultBallScale, defaultDrawHeight);
         }
+        ImGui::Checkbox("useInterpolated", &useInterpolated);
+
 
         ImGui::End();
 
@@ -849,10 +858,14 @@ int main() {
         ImGui::Checkbox("Capture Cursor", &leftMouse);
         ImGui::Checkbox("Replay", &replay);
         ImGui::SliderFloat("replaySpeed", &replaySpeed, 1.f, 100.f);
-        // ImGui::Checkbox("Replay With Drawing", &replayWithDrawing);
 
         if (replay or replayWithDrawing)
             active_mouse = false;
+
+        if (ImGui::Button("noShading")) {
+            noShading = !noShading;
+        }
+
 
         if (ImGui::Button("replayCamWithDrawing")) {
             replayWithDrawing = true;
