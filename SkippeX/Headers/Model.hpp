@@ -18,6 +18,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include "Object.hpp"
 
 using namespace std;
 
@@ -28,6 +29,7 @@ public:
     bool noTex;
     unsigned int instancing;
     std::vector<glm::mat4> instancesMatrix;
+    std::vector<Triangle> triangles;
 
     Model(glm::vec3 pos = glm::vec3(0.0f), glm::vec3 size = glm::vec3(1.0f), bool noTex = false, unsigned int instancing = 1, std::vector<glm::mat4> instancesMatrix = {})
         : pos(pos), size(size), noTex(noTex), instancing(instancing), instancesMatrix(instancesMatrix)
@@ -44,7 +46,20 @@ public:
         for (Mesh mesh : meshes)
             mesh.Delete();
     }
-
+    std::vector<sObject> populate_triangles(glm::mat4 model)
+    {
+        std::vector<sObject> triangles;
+        for (Mesh mesh : meshes) {
+            for (int i = 0; i < mesh.indices.size(); i+=3)
+            {
+                glm::vec3 a = glm::vec3(model * glm::vec4( mesh.vertices[mesh.indices[i]].Position, 1.f));
+                glm::vec3 b = glm::vec3(model * glm::vec4(mesh.vertices[mesh.indices[i + 1]].Position, 1.f));
+                glm::vec3 c = glm::vec3(model * glm::vec4(mesh.vertices[mesh.indices[i + 2]].Position, 1.f));
+                triangles.push_back(std::make_shared<Triangle>(a,b,c));
+            }
+        }
+        return triangles;
+    }
 protected:
     std::vector<Mesh> meshes;
     std::string directory;

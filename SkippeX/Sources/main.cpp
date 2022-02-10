@@ -76,12 +76,12 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 /**
  * Handle user input | Mouse & Keyboard
  */
-void input(Camera& camera);
+void input();
 
 /**
  * Register user strokes defined by the position of the cursor on the screen / window.
  */
-void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
+void cursor_position_callback(GLFWwindow* window, double x_pos, double y_pos);
 
 // Function prototypes
 
@@ -99,7 +99,7 @@ std::vector<float> intersectStates; // Store the change of states from on to off
 std::vector<float> intersectSwitches; // Switch history between back and front so that later on we can flip front<->Back
 std::vector<Sphere> bounding_spheres; // Array of all bounding spheres that are used
 std::vector<glm::mat4> instanceMatrix; // All instance matrices that describe each instance model to pass to the shader
-Model spheres; // spheres Model to load an object and then use its mesh to draw as many instances as we want
+Model* spheres; // spheres Model to load an object and then use its mesh to draw as many instances as we want
 Curve* curve = nullptr; // Curve to fit the control points = intersected points
 Curve* detailed_curve = nullptr; // Curve with interpolated points
 std::vector<sObject> boundingObjects; // Bounding objects
@@ -123,7 +123,7 @@ void addSphereInstance(Ray ray, glm::vec2 t_vals, glm::vec3 origin, float size=0
 /**
  * If any parameter were changed (height, size, etc) recompute the transforms
  */
-void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f);
+void updateSphereInstances(glm::vec3 pos, float size=0.1, float hdist=0.5f);
 
 /**
  * Travel in the screen using the curve as reference positions and its tangent values for the orientations of the camera
@@ -265,9 +265,9 @@ int main() {
     ImVec4 mcolor = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
 
     // Plane Variables
-    glm::vec4 planeColor = glm::vec4(1.0f);
-    glm::vec3 planePos = glm::vec3(0.0f, -4.f, 0.0f);
-    glm::mat4 plane_model = glm::mat4(1.0f);
+    auto planeColor = glm::vec4(1.0f);
+    auto planePos = glm::vec3(0.0f, -4.f, 0.0f);
+    auto plane_model = glm::mat4(1.0f);
     glm::vec3 rotate_plane(0.f, 90.f, 0.f);
     plane_model = glm::translate(plane_model, planePos);
 
@@ -279,19 +279,19 @@ int main() {
     std::vector<float> fps_values(100, 0);
 
     // Lighting Variables
-    glm::vec4 lightColor = glm::vec4(1.0f);
-    glm::vec3 lightPos = glm::vec3(0.0f, 13.0f, 2.0f);
-    glm::mat4 lightModel = glm::mat4(1.0f);
+    auto lightColor = glm::vec4(1.0f);
+    auto lightPos = glm::vec3(0.0f, 13.0f, 2.0f);
+    auto lightModel = glm::mat4(1.0f);
     lightModel = glm::translate(lightModel, lightPos);
 
-    glm::vec3 ballPos = glm::vec3 (0, 0, 0);
-    glm::quat ballRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    auto ballPos = glm::vec3 (0, 0, 0);
+    auto ballRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     auto size = 1.f;
     glm::vec3 ballScale = glm::vec3(size, size, size);
 
-    glm::mat4 trans = glm::mat4(1.0f);
-    glm::mat4 rot = glm::mat4(1.0f);
-    glm::mat4 sca = glm::mat4(1.0f);
+    auto trans = glm::mat4(1.0f);
+    auto rot = glm::mat4(1.0f);
+    auto sca = glm::mat4(1.0f);
 
     trans = glm::translate(trans, ballPos);
     rot = glm::mat4_cast(ballRotation);
@@ -308,9 +308,23 @@ int main() {
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
     Model nanosuit_model(glm::vec3(0.0f, -4.f, -10), glm::vec3(mscale), false);
     nanosuit_model.loadModel("nanosuit/nanosuit.obj");
+    glm::mat4 nanosuitModel(1.0f);
+    nanosuitModel = glm::translate(nanosuitModel, nanosuit_model.pos);
+    nanosuitModel = glm::scale(nanosuitModel, glm::vec3(mscale));
+
+    /*
+    int boundingNonTriangleObjects = int(boundingObjects.size() - 1);
+    auto nanosuit_triangles = nanosuit_model.populate_triangles(camera.projection * camera.view * nanosuitModel);
+    for (const auto& triangle : nanosuit_triangles)
+    {
+        boundingObjects.push_back(triangle);
+    }
+    */
+
 
     Model plane(planePos, glm::vec3(plscale), false);
     plane.loadModel("Sponza/Sponza.gltf");
+
 
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
@@ -339,7 +353,7 @@ int main() {
     unsigned int framebufferTexture;
     glGenTextures(1, &framebufferTexture);
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, framebufferTexture);
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB, width, height, GL_TRUE);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, GLsizei(samples), GL_RGB, width, height, GL_TRUE);
     glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // Prevents edge bleeding
@@ -350,7 +364,7 @@ int main() {
     unsigned int RBO;
     glGenRenderbuffers(1, &RBO);
     glBindRenderbuffer(GL_RENDERBUFFER, RBO);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, GLsizei(samples), GL_DEPTH24_STENCIL8, width, height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
 
     // Error checking framebuffer
@@ -389,12 +403,12 @@ int main() {
 
         double t_now = glfwGetTime();
         double time = t_now - t_start;
-        t_data.push_back(t_now);
+        t_data.push_back(float(t_now));
 
         glClearError();
 
         // Polling & Updating Elements
-        input(camera);
+        input();
         if (active_mouse) {
             camera.movements(window);
         }
@@ -407,7 +421,7 @@ int main() {
         if (camera.positions.size() > 5) {
             if (replay or replayWithDrawing) {
                 replay_ind += int(replaySpeed);
-                if (replay_ind >= camera.positions.size())
+                if (replay_ind >= int(camera.positions.size()))
                     replay_ind = 0;
                 camera.P = camera.positions[replay_ind];
                 camera.O = camera.orientations[replay_ind];
@@ -417,9 +431,9 @@ int main() {
         camera.update(fovDeg, 0.1f, 500.0f);
 
         // Move light in the scene
-        lightPos.x = radius * cos(time * speed);
-        lightPos.z = radius * sin(time * speed);
-        lightPos.y = rheight * (time * speed);
+        lightPos.x = float(radius * cos(time * speed));
+        lightPos.z = float(radius * sin(time * speed));
+        lightPos.y = float(rheight * (time * speed));
 
 
         // Intersect with ball
@@ -429,8 +443,8 @@ int main() {
         glm::vec2 t_vals(0.f);
         Object* intersectedObj;
         Ray ray = camera.getClickDir(int(xpos), int(ypos), width, height);
-        for (auto obj : boundingObjects) {
-            glm::vec2 curr_t = glm::vec2(std::numeric_limits<float>::max());
+        for (const auto& obj : boundingObjects) {
+            auto curr_t = glm::vec2(std::numeric_limits<float>::max());
             if (obj->get_intersection(ray, intersect, normal, curr_t)) {
                 t_vals[0] = curr_t[0];
                 t_vals[1] = curr_t[1];
@@ -470,6 +484,12 @@ int main() {
                 printf("Intersected %s at (%f, %f, %f) for t(%f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
                        intersect.z, t_vals[0], t_vals[1]);
                 intersectedModel = bPlaneModel;
+            }
+            else if (intersectedObj->type == "Triangle") {
+                glm::highp_f32vec4 posIntersect = glm::inverse(nanosuitModel) * glm::highp_f32vec4(intersect, 1.0f);
+                printf("Intersected %s at (%f, %f, %f) for t(%f, %f)\n", intersectedObj->type.c_str(), intersect.x, intersect.y,
+                       intersect.z, t_vals[0], t_vals[1]);
+                intersectedModel = nanosuitModel;
             }
         }
 
@@ -545,7 +565,7 @@ int main() {
 
         glCheckError(); glClearError();
 
-        if (not replayWithDrawing) {
+        if (not replayWithDrawing and spheres) {
             // Drawing spheres instances
             spheres_shader.Activate();
 
@@ -567,7 +587,7 @@ int main() {
             spheres_shader.SetFloat("far", camera.far);
             spheres_shader.SetFloat("near", camera.near);
             spheres_shader.SetVec4("Ucolor", glm::vec4(1.0f));
-            spheres.Draw(spheres_shader);
+            spheres->Draw(spheres_shader);
         }
         glCheckError(); glClearError();
 
@@ -635,8 +655,8 @@ int main() {
         if (polling_points) {
             if (intersected)
                 addSphereInstance(ray, t_vals, intersectedObj->origin, defaultBallScale, defaultDrawHeight);
-            intersectStates.push_back(int(intersected));
-            intersectSwitches.push_back(switch_front_back);
+            intersectStates.push_back(float(intersected));
+            intersectSwitches.push_back(float(switch_front_back));
             if (useSpheres)
                 renderLinesOnSphere(intersected, camera, intersect, normal, intersectedModel);
             else
@@ -696,7 +716,7 @@ int main() {
 
         // Render Imgui and Implot Widgets
         ImGui::Begin("Change Light and Background");
-        ImGui::PlotLines((std::string("FPS : ") + std::to_string(fps_values[fps_values.size() - 1])).c_str(), fps_values.data(), fps_values.size());
+        ImGui::PlotLines((std::string("FPS : ") + std::to_string(fps_values[fps_values.size() - 1])).c_str(), fps_values.data(), int(fps_values.size()));
         ImGui::Text("Background Settings");
         ImGui::ColorEdit3("clear color", (float*)&clear_color);
 
@@ -730,7 +750,7 @@ int main() {
         auto olddefaultDrawHeight = defaultDrawHeight;
         auto olddefaultBallScale = defaultBallScale;
         ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 0.075f);
-        ImGui::SliderFloat("default Height", &defaultDrawHeight, 0.0f, 3.0f);
+        ImGui::SliderFloat("default Height", &defaultDrawHeight, 0.0f, 7.0f);
         ImGui::SliderInt("interpolation samples", &interpolation_samples, 2, 20);
         ImGui::Checkbox("useInterpolated", &useInterpolated);
 
@@ -786,13 +806,13 @@ int main() {
 
         ImGui::Begin("Plots Window");
         if (ImPlot::BeginPlot("Evolutions of ")) {
-            ImPlot::PlotLine("My Line 1", &t_data[0], &x_data[0], x_data.size());
-            ImPlot::PlotLine("My Line 2", &t_data[0], &y_data[0], y_data.size());
+            ImPlot::PlotLine("My Line 1", &t_data[0], &x_data[0], int(x_data.size()));
+            ImPlot::PlotLine("My Line 2", &t_data[0], &y_data[0], int(y_data.size()));
             ImPlot::EndPlot();
         }
         if (ImPlot::BeginPlot("My Plot")) {
-            ImPlot::PlotLine("States", &t_data[0], &intersectStates[0], intersectStates.size());
-            ImPlot::PlotLine("SwitchesOnOff", &t_data[0], &intersectSwitches[0], intersectSwitches.size());
+            ImPlot::PlotLine("States", &t_data[0], &intersectStates[0], int(intersectStates.size()));
+            ImPlot::PlotLine("SwitchesOnOff", &t_data[0], &intersectSwitches[0], int(intersectSwitches.size()));
             ImPlot::EndPlot();
         }
         ImGui::End();
@@ -817,7 +837,8 @@ int main() {
     ball.Delete();
     nanosuit_model.Delete();
     uv_sphere.Delete();
-    spheres.Delete();
+    if (spheres)
+        spheres->Delete();
 
     glDeleteFramebuffers(1, &FBO);
     glDeleteRenderbuffers(1, &RBO);
@@ -838,16 +859,20 @@ static void error_callback(int error, const char* description)
     fprintf(stderr, "Error %d: %s\n", error, description);
 }
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
+void framebuffer_size_callback(GLFWwindow* wind, int w, int h) {
+    if (!wind)
+        return;
+    glViewport(0, 0, w, h);
 }
 
-void cursor_position_callback(GLFWwindow* window, double x_pos, double y_pos) {
+void cursor_position_callback(GLFWwindow* w, double x_pos, double y_pos) {
+    if (!w)
+        return;
     xpos = x_pos;
     ypos = y_pos;
 }
 
-void input(Camera& camera) {
+void input() {
 
     if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
         points_buffer.clear();
@@ -866,7 +891,7 @@ void input(Camera& camera) {
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS)
     {
         active_mouse = !active_mouse;
-        if (active_mouse == true)
+        if (active_mouse)
         {
             polling_points = false;
         }
@@ -903,8 +928,8 @@ void renderLines(bool intersect)
 {
     //Getting cursor position
     glm::vec3 p(0.f,0.f,0.f);
-    p.x = xpos;
-    p.y = height - ypos;
+    p.x = float(xpos);
+    p.y = float(height - ypos);
     p.z = 0;
     // std::cout << "(" << p.x << "," << p.y << ")" << std::endl;
 
@@ -921,8 +946,8 @@ void renderLines(bool intersect)
             float y1 = start.y;
             float x2 = end.x;
             float y2 = end.y;
-            float w = width;
-            float h = height;
+            auto w = float(width);
+            auto h = float(height);
 
             // convert 3d world space position 2d screen space position
             x1 = 2 * x1 / w - 1;
@@ -1023,13 +1048,13 @@ void addSphereInstance(Ray ray, glm::vec2 t_vals, glm::vec3 origin, float size, 
     bounding_spheres.emplace_back(tempTranslation, size * 0.595f);
 }
 
-void updateSphereInstances(glm::vec3 pos, float size, float height)
+void updateSphereInstances(glm::vec3 pos, float size, float hdist)
 {
     auto t_start = std::chrono::high_resolution_clock::now();
     std::vector<glm::mat4> interpolated_instanceMatrix;
-    for (int i = 0; i < instanceMatrix.size(); i++)
+    for (unsigned int i = 0; i < instanceMatrix.size(); i++)
     {
-        glm::vec3 tempTranslation = bounding_spheres[i].origin * height;
+        glm::vec3 tempTranslation = bounding_spheres[i].origin * hdist;
         glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
         glm::vec3 tempScale = glm::vec3(size, size, size);
 
@@ -1047,10 +1072,10 @@ void updateSphereInstances(glm::vec3 pos, float size, float height)
     {
         curve = new Curve();
         curve->samples = interpolation_samples;
-        for (int i = 0; i < bounding_spheres.size(); i++)
-            curve->add_point(bounding_spheres[i].origin * height);
+        for (auto & bounding_sphere : bounding_spheres)
+            curve->add_point(bounding_sphere.origin * hdist);
 
-        for (int i = 0; i < curve->points.size(); i++) {
+        for (int i = 0; i < int(curve->points.size()); i++) {
             glm::vec3 tempTranslation = curve->at(i);
             glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
             glm::vec3 tempScale = glm::vec3(size, size, size);
@@ -1067,15 +1092,15 @@ void updateSphereInstances(glm::vec3 pos, float size, float height)
 
         }
         std::cout << "Num of interpolated spheres" << interpolated_instanceMatrix.size() << std::endl;
-        spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(),
+        spheres = new Model(pos, glm::vec3(size * 0.1f), true, interpolated_instanceMatrix.size(),
                         interpolated_instanceMatrix);
-        spheres.loadModel("uvsphere/uvsphere.obj");
+        spheres->loadModel("uvsphere/uvsphere.obj");
     }
     else
     {
         std::cout << "Num of spheres" << instanceMatrix.size() << std::endl;
-        spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
-        spheres.loadModel("uvsphere/uvsphere.obj");
+        spheres = new Model(pos, glm::vec3(size * 0.1f), true, instanceMatrix.size(), instanceMatrix);
+        spheres->loadModel("uvsphere/uvsphere.obj");
     }
     auto t_now = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
@@ -1093,13 +1118,13 @@ void replayCamWithDrawing(Camera& cam)
     cam.positions.clear();
     cam.orientations.clear();
 
-    Curve *detailed_curve = new Curve();
+    detailed_curve = new Curve();
     detailed_curve->samples = 35;
-    for (int i = 0; i < curve->points.size(); i++)
+    for (int i = 0; i < int(curve->points.size()); i++)
         detailed_curve->add_point(curve->at(i));
 
     int N = 10;
-    for (int i = N; i < detailed_curve->points.size() - N; i++) {
+    for (int i = N; i < int(detailed_curve->points.size() - N); i++) {
         auto currPos = detailed_curve->at(i);
         auto nextPos = detailed_curve->at(i + 1);
 

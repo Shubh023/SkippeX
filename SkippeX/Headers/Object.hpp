@@ -124,4 +124,67 @@ public:
     };
 };
 
+class Triangle : public Object
+{
+public:
+    Triangle(glm::vec3 _a, glm::vec3  _b, glm::vec3 _c)
+    : Object(a, "Triangle"), a(_a), b(_b), c(_c)
+    {};
+    bool get_intersection(Ray& ray, glm::highp_f32vec3 &point, glm::highp_f32vec3 &normal, glm::vec2& t_val) const override {
+        glm::vec3 orig = ray.point;
+        glm::vec3 dir = ray.dir;
+        glm::vec3 v0 = a;
+        glm::vec3 v1 = b;
+        glm::vec3 v2 = c;
+        float t;
+
+        glm::vec3 v0v1 = v1 - v0;
+        glm::vec3 v0v2 = v2 - v0;
+        // no need to normalize
+        glm::vec3 N = glm::cross(v0v1,v0v2);
+
+
+        float NdotRayDirection = glm::dot(N,dir);
+        if (fabs(NdotRayDirection) < 0.000001f)
+            return false;
+
+        float d = -glm::dot(N,v0);
+
+        t = -(glm::dot(N, orig) + d) / NdotRayDirection;
+
+
+        if (t < 0) return false;
+
+        glm::vec3 P = orig + t * dir;
+        glm::vec3 C;
+
+        glm::vec3 edge0 = v1 - v0;
+        glm::vec3 vp0 = P - v0;
+        C = glm::cross(edge0, vp0);
+        if (glm::dot(N, C) < 0) return false;
+
+        glm::vec3 edge1 = v2 - v1;
+        glm::vec3 vp1 = P - v1;
+        C = glm::cross(edge1,vp1);
+        if (glm::dot(N,C) < 0)  return false;
+
+        glm::vec3 edge2 = v0 - v2;
+        glm::vec3 vp2 = P - v2;
+        C = glm::cross(edge2,vp2);
+        if (glm::dot(N, C) < 0) return false;
+
+        normal = glm::vec3(N);
+        float area2 = glm::length(N);
+        point = glm::vec3(P);
+        t_val[0] = t;
+        t_val[1] = t;
+
+        return true;
+    }
+    glm::vec3  a;
+    glm::vec3  b;
+    glm::vec3  c;
+};
+
+
 using sObject = std::shared_ptr<Object>;
