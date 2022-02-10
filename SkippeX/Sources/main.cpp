@@ -118,8 +118,8 @@ void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec
 /**
  * Add a sphere instance of a certain size at a certain distance from the hit positions P1 and P2 from the ray cast
  */
-void addSphereInstance(Ray ray, glm::vec2 t_vals, float size=0.1f, float distance=0.5f);
-
+void addSphereInstance(Ray ray, glm::vec2 t_vals, glm::vec3 origin, float size=0.1f, float distance=0.5f);
+// void addSphereInstance(Ray ray, glm::vec2 t_vals, float size, float distance, glm::vec3 origin)
 /**
  * If any parameter were changed (height, size, etc) recompute the transforms
  */
@@ -298,6 +298,7 @@ int main() {
     sca = glm::scale(sca, ballScale);
 
     glm::mat4 bBallModel = trans * rot * sca;
+    glm::vec3 otherBallPos = glm::vec3(2.0f, 0.f, 0.f);
     glm::mat4 bPlaneModel = glm::translate(glm::mat4(1.0f), planePos) * glm::mat4_cast(ballRotation) * glm::mat4(1.0f);
     auto boundingBall = std::make_shared<Sphere>(ballPos, size * 0.50f);
     auto boundingPlane = std::make_shared<Plane>(glm::vec3(0.0f), glm::vec3(0.f, 1.0f, 0.f));
@@ -633,7 +634,7 @@ int main() {
 
         if (polling_points) {
             if (intersected)
-                addSphereInstance(ray, t_vals, defaultBallScale, defaultDrawHeight);
+                addSphereInstance(ray, t_vals, intersectedObj->origin, defaultBallScale, defaultDrawHeight);
             intersectStates.push_back(int(intersected));
             intersectSwitches.push_back(switch_front_back);
             if (useSpheres)
@@ -983,7 +984,7 @@ void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec
     std::cout << "Total Points : " << points.size() << std::endl;
 }
 
-void addSphereInstance(Ray ray, glm::vec2 t_vals, float size, float distance)
+void addSphereInstance(Ray ray, glm::vec2 t_vals, glm::vec3 origin, float size, float distance)
 {
     if (intersected_points.size() < 2)
         return;
@@ -992,10 +993,20 @@ void addSphereInstance(Ray ray, glm::vec2 t_vals, float size, float distance)
     if (OnOff != prevOnOff)
         switch_front_back *= -1;
     glm::vec4 pos;
-    if (switch_front_back == 1)
-        pos = glm::vec4(ray.get_sample(t_vals[0] - distance), 1.0f);
-    else if (switch_front_back == -1)
-        pos = glm::vec4(ray.get_sample(t_vals[1] + distance), 1.0f);
+    if (switch_front_back == 1) {
+        // pos = glm::vec4(ray.get_sample(t_vals[0] - distance), 1.0f);
+        pos = glm::vec4(ray.get_sample(t_vals[0]), 1.0f);
+        glm::vec3 normal = glm::highp_f32vec3(pos.x - origin.x, pos.y - origin.y, pos.z - origin.z);
+        normal = glm::normalize(normal);
+        pos = glm::vec4(normal * distance, 1.0f);
+    }
+    else if (switch_front_back == -1) {
+        // pos = glm::vec4(ray.get_sample(t_vals[1] + distance), 1.0f);
+        pos = glm::vec4(ray.get_sample(t_vals[1]), 1.0f);
+        glm::vec3 normal = glm::highp_f32vec3(pos.x - origin.x, pos.y - origin.y, pos.z - origin.z);
+        normal = glm::normalize(normal);
+        pos = glm::vec4(normal * distance, 1.0f);
+    }
     glm::vec3 tempTranslation = pos;
     glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
     glm::vec3 tempScale = glm::vec3(size, size, size);
