@@ -1,6 +1,5 @@
 #pragma once
 
-
 //Local Includes
 #include "Object.hpp"
 
@@ -141,9 +140,9 @@ Ray Camera::getClickDir(int x, int y, int width, int height) {
     glm::highp_f32vec4 farResult = invMat * far;
     nearResult /= nearResult.w;
     farResult /= farResult.w;
-    // auto res = farResult - nearResult;
-    auto res = glm::vec3(nearResult.x, nearResult.y, nearResult.z) - P;
+    auto res = farResult - nearResult;
+    // auto res = glm::vec3(nearResult.x, nearResult.y, nearResult.z) - P;
     glm::highp_f32vec3 dir = glm::vec3(res.x, res.y, res.z);
     dir = normalize(dir);
-    return Ray(P, dir);
+    return Ray(nearResult, dir);
 }

@@ -6,7 +6,7 @@
 #include "Model.hpp"
 #include "Camera.hpp"
 #include "Object.hpp"
-#include "Spline.hpp"
+#include "Curve.hpp"
 
 // System Headers
 // ImGui
@@ -37,12 +37,16 @@
 #define FULLSCREEN GL_FALSE
 #define RESIZABLE GL_FALSE
 #define ACTIVATE_DEBUG false
+
+// Window Height and Width
 int width = 1920;
 int height = 1080;
-float fovDeg = 60.f;
-unsigned int samples = 8;
-double xpos, ypos;
-bool leftMouse = false;
+
+float fovDeg = 60.f; // Default for camera
+unsigned int samples = 4; // Multisampling in the Framebuffer
+int interpolation_samples = 5; // Interpolation samples for the curve
+double xpos, ypos; // Mouse cursors Position
+bool leftMouse = false; // Left Mouse Click
 
 float rectangleVertices[] =
 {
@@ -61,14 +65,25 @@ GLFWwindow* window;
 GLFWmonitor* monitor;
 
 // Callbacks
+/**
+ * Check if there were any errors
+ */
 static void error_callback(int error, const char* description);
+/**
+ * Check any change in the window size
+ */
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void processInput(GLFWwindow* window);
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+/**
+ * Handle user input | Mouse & Keyboard
+ */
+void input(Camera& camera);
+
+/**
+ * Register user strokes defined by the position of the cursor on the screen / window.
+ */
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 
 // Function prototypes
-void input(Camera& camera);
 
 // States
 bool active_mouse = false;
@@ -76,113 +91,44 @@ bool showIntersected = false;
 bool polling_points = false;
 bool useSpheres = false;
 int switch_front_back = -1.f;
-std::vector<glm::vec3> points_buffer;
-std::vector<float> points;
-std::vector<float> intersected_points;
-std::vector<float> intersectStates;
-std::vector<float> intersectSwitches;
-std::vector<Sphere> bounding_spheres;
-std::vector<glm::mat4> instanceMatrix;
-Model spheres;
-Curve* curve = nullptr;
-Curve* detailed_curve = nullptr;
-std::vector<sObject> boundingObjects;
-bool useInterpolated = false;
 
+std::vector<glm::vec3> points_buffer; // To store the user strokes
+std::vector<float> points; // To store user strokes in an optimal way
+std::vector<float> intersected_points; // Strokes where we intersected an objecs
+std::vector<float> intersectStates; // Store the change of states from on to off segements
+std::vector<float> intersectSwitches; // Switch history between back and front so that later on we can flip front<->Back
+std::vector<Sphere> bounding_spheres; // Array of all bounding spheres that are used
+std::vector<glm::mat4> instanceMatrix; // All instance matrices that describe each instance model to pass to the shader
+Model spheres; // spheres Model to load an object and then use its mesh to draw as many instances as we want
+Curve* curve = nullptr; // Curve to fit the control points = intersected points
+Curve* detailed_curve = nullptr; // Curve with interpolated points
+std::vector<sObject> boundingObjects; // Bounding objects
+bool useInterpolated = false; // Bool that states if interpolation is used
+
+/**
+ * Render the 2D strokes of the user as lines and if intersect is true add the strokes in the corresponding vector
+ */
 void renderLines(bool intersect);
+
+/**
+ * Render the 2D strokes of on the spheres using the normal at the intersection
+ */
 void renderLinesOnSphere(bool intersect, Camera& cam, glm::vec3 hitPos, glm::vec3 hitNormal, glm::mat4 model);
+
+/**
+ * Add a sphere instance of a certain size at a certain distance from the hit positions P1 and P2 from the ray cast
+ */
 void addSphereInstance(Ray ray, glm::vec2 t_vals, float size=0.1f, float distance=0.5f);
 
-void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f)
-{
-    std::vector<glm::mat4> interpolated_instanceMatrix;
-    for (int i = 0; i < instanceMatrix.size(); i++)
-    {
-        glm::vec3 tempTranslation = bounding_spheres[i].origin * height;
-        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        glm::vec3 tempScale = glm::vec3(size, size, size);
+/**
+ * If any parameter were changed (height, size, etc) recompute the transforms
+ */
+void updateSphereInstances(glm::vec3 pos, float size=0.1, float height=0.5f);
 
-        glm::mat4 trans = glm::mat4(1.0f);
-        glm::mat4 rot = glm::mat4(1.0f);
-        glm::mat4 sca = glm::mat4(1.0f);
-
-        trans = glm::translate(trans, tempTranslation);
-        rot = glm::mat4_cast(tempRotation);
-        sca = glm::scale(sca, tempScale);
-
-        instanceMatrix[i] = trans * rot * sca;
-    }
-    if (useInterpolated)
-    {
-        curve = new BSpline();
-        curve->set_steps(25);
-        for (int i = 0; i < bounding_spheres.size(); i++)
-            curve->add_way_point(bounding_spheres[i].origin * height);
-
-        for (int i = 0; i < curve->node_count(); i++) {
-            glm::vec3 tempTranslation = curve->node(i);
-            glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-            glm::vec3 tempScale = glm::vec3(size, size, size);
-
-            glm::mat4 trans = glm::mat4(1.0f);
-            glm::mat4 rot = glm::mat4(1.0f);
-            glm::mat4 sca = glm::mat4(1.0f);
-
-            trans = glm::translate(trans, tempTranslation);
-            rot = glm::mat4_cast(tempRotation);
-            sca = glm::scale(sca, tempScale);
-
-            interpolated_instanceMatrix.push_back(trans * rot * sca);
-
-        }
-        std::cout << "Num of interpolated spheres" << interpolated_instanceMatrix.size() << std::endl;
-        spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(),
-                            interpolated_instanceMatrix);
-        spheres.loadModel("uvsphere/uvsphere.obj");
-    }
-    else
-    {
-        std::cout << "Num of spheres" << instanceMatrix.size() << std::endl;
-        spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
-        spheres.loadModel("uvsphere/uvsphere.obj");
-    }
-}
-
-void replayCamWithDrawing(Camera& cam)
-{
-    if (curve->is_empty())
-    {
-        std::cout << "Empty Curve" << std::endl;
-        return;
-    }
-    cam.positions.clear();
-    cam.orientations.clear();
-
-    Curve *detailed_curve = new BSpline();
-    detailed_curve->set_steps(35);
-    for (int i = 0; i < curve->node_count(); i++)
-        detailed_curve->add_way_point(curve->node(i));
-
-    int N = 10;
-    for (int i = N; i < detailed_curve->node_count() - N; i++) {
-        auto currPos = detailed_curve->node(i);
-        auto nextPos = detailed_curve->node(i + 1);
-
-        glm::vec3 avg_orientation = glm::normalize(nextPos - currPos);
-        glm::vec3 avg_pos = currPos;
-        for (int j = -N; j < N - 1; j++) {
-            avg_orientation += glm::normalize(detailed_curve->node(i - j) - detailed_curve->node(j));
-            avg_pos += detailed_curve->node(j);
-        }
-        avg_orientation /= float(N);
-        avg_pos /= float(N);
-
-        if (!glm::any(glm::isnan(avg_pos)) or !glm::any(glm::isnan(avg_orientation))) {
-            cam.positions.push_back(avg_pos);
-            cam.orientations.push_back(glm::normalize(avg_orientation));
-        }
-    }
-}
+/**
+ * Travel in the screen using the curve as reference positions and its tangent values for the orientations of the camera
+ */
+void replayCamWithDrawing(Camera& cam);
 
 int main() {
     
@@ -192,15 +138,14 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_RESIZABLE, RESIZABLE);
     // glfwWindowHint(GLFW_SAMPLES, samples);
     if (ACTIVATE_DEBUG)
         glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-
 
     // Setup Monitor to Primary
     monitor = glfwGetPrimaryMonitor();
@@ -212,7 +157,6 @@ int main() {
         height = mode->height;
     }
     std::cout << "Using Window Size : " << width << " x " << height << std::endl;
-
 
     // Initialize Window
     window = glfwCreateWindow(width, height, "Skippex | OpenGL", nullptr, nullptr);
@@ -231,7 +175,6 @@ int main() {
     // Setting up Callbacks
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetErrorCallback(error_callback);
-    glfwSetScrollCallback(window, scroll_callback);
     glfwSetCursorPosCallback(window, cursor_position_callback);
 
 
@@ -247,13 +190,10 @@ int main() {
     glCullFace(GL_FRONT);
     glFrontFace(GL_CW);
 
-    // Enable Multisampling
     // glEnable(GL_MULTISAMPLE);
-    // Enables Gamma Correction
     // glEnable(GL_FRAMEBUFFER_SRGB);
 
     // IMGUI Stuff
-
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImPlot::CreateContext();
@@ -303,12 +243,6 @@ int main() {
     framebuffershader.Activate();
     framebuffershader.SetInt("screenTexture", 0);
 
-    /*
-    LinkedShader shadowShader(std::vector<shader>({ shader(GL_VERTEX_SHADER, "shadow.vert"),
-                                                         shader(GL_FRAGMENT_SHADER, "shadow.frag") }));
-    shadowShader.Compile();
-    */
-
     // Define Useful variables (time_delta, ImGui elements, etc... )
     auto tchrono_start = std::chrono::high_resolution_clock::now();
     float speed = 1.0f;
@@ -337,7 +271,7 @@ int main() {
     glm::vec3 rotate_plane(0.f, 90.f, 0.f);
     plane_model = glm::translate(plane_model, planePos);
 
-    // Define Stuff for ImPlot widget
+    // Define data containers for ImPlot widget
     std::vector<float> x_data(100, 0);
     std::vector<float> y_data(100, 0);
     std::vector<float> z_data(100, 0);
@@ -369,30 +303,6 @@ int main() {
     auto boundingPlane = std::make_shared<Plane>(glm::vec3(0.0f), glm::vec3(0.f, 1.0f, 0.f));
 
     boundingObjects.push_back(boundingBall);
-    //boundingObjects.push_back(boundingPlane);
-    /*
-    int instances = 2;
-    for (int i = -instances; i <= instances; i++) {
-
-        int t = i * 4;
-        float r = radius * 0.5;
-        // glm::vec3 tempTranslation = glm::vec3 (r * cos(t), 1 + t * rheight * 10, r * sin(t));
-        glm::vec3 tempTranslation = glm::vec3 (t, 1, 1);
-        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-        auto size = 1.25f;
-        glm::vec3 tempScale = glm::vec3(size, size, size);
-
-        glm::mat4 trans = glm::mat4(1.0f);
-        glm::mat4 rot = glm::mat4(1.0f);
-        glm::mat4 sca = glm::mat4(1.0f);
-
-        trans = glm::translate(trans, tempTranslation);
-        rot = glm::mat4_cast(tempRotation);
-        sca = glm::scale(sca, tempScale);
-
-        instanceMatrix.push_back(trans * rot * sca);
-        bounding_spheres.emplace_back(tempTranslation, size * 0.595f);
-    }*/
 
     // Define Models get more at https://casual-effects.com/g3d/data10/index.html#mesh4
     Model nanosuit_model(glm::vec3(0.0f, -4.f, -10), glm::vec3(mscale), false);
@@ -404,10 +314,10 @@ int main() {
     Model uv_sphere(lightPos, glm::vec3(lscale), true);
     uv_sphere.loadModel("uvsphere/uvsphere.obj");
 
-    Model ball(ballPos, glm::vec3(size), true);
+    Model ball(boundingBall->origin, glm::vec3(size), true);
     ball.loadModel("uvsphere/uvsphere.obj");
 
-    // Frame Rectangle
+    // Frame Rectangle for framebuffers
     unsigned int rectVAO, rectVBO;
     glGenVertexArrays(1, &rectVAO);
     glGenBuffers(1, &rectVBO);
@@ -505,6 +415,7 @@ int main() {
 
         camera.update(fovDeg, 0.1f, 500.0f);
 
+        // Move light in the scene
         lightPos.x = radius * cos(time * speed);
         lightPos.z = radius * sin(time * speed);
         lightPos.y = rheight * (time * speed);
@@ -560,22 +471,6 @@ int main() {
                 intersectedModel = bPlaneModel;
             }
         }
-
-        /*
-        glm::highp_f32vec3 intersect, normal;
-        int idSphere = -1;
-        bool intersected = false;
-        for (int f = 0; f < bounding_spheres.size(); f++) {
-            Ray ray = camera.getClickDir(int(xpos), int(ypos), width, height);
-            if (bounding_spheres[f].get_intersection(ray, intersect, normal)) {
-                intersected = true;
-                glm::highp_f32vec4 posIntersect = glm::inverse(instanceMatrix[f]) * glm::highp_f32vec4(intersect, 1.0f);
-                printf("Intersected Sphere %d at (%f, %f, %f)\n", f, intersect.x, intersect.y, intersect.z);
-                printf("Intersected Sphere %d\n", f);
-                idSphere = f;
-            }
-        }
-        */
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, FBO);
 
@@ -835,6 +730,9 @@ int main() {
         auto olddefaultBallScale = defaultBallScale;
         ImGui::SliderFloat("default Scale", &defaultBallScale, 0.0f, 0.075f);
         ImGui::SliderFloat("default Height", &defaultDrawHeight, 0.0f, 3.0f);
+        ImGui::SliderInt("interpolation samples", &interpolation_samples, 2, 20);
+        ImGui::Checkbox("useInterpolated", &useInterpolated);
+
         if (olddefaultDrawHeight != defaultDrawHeight || olddefaultBallScale != defaultBallScale)
         {
             updateSphereInstances(glm::vec3(0.0f), defaultBallScale, defaultDrawHeight);
@@ -842,8 +740,9 @@ int main() {
         if (ImGui::Button("Update Instances")) {
             updateSphereInstances(glm::vec3(0.0f), defaultBallScale, defaultDrawHeight);
         }
-        ImGui::Checkbox("useInterpolated", &useInterpolated);
-
+        if (ImGui::Button("Shading")) {
+            noShading = !noShading;
+        }
 
         ImGui::End();
 
@@ -863,11 +762,6 @@ int main() {
 
         if (replay or replayWithDrawing)
             active_mouse = false;
-
-        if (ImGui::Button("noShading")) {
-            noShading = !noShading;
-        }
-
 
         if (ImGui::Button("replayCamWithDrawing")) {
             replayWithDrawing = true;
@@ -952,10 +846,6 @@ void cursor_position_callback(GLFWwindow* window, double x_pos, double y_pos) {
     ypos = y_pos;
 }
 
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    std::cout << xoffset << std::endl;
-}
-
 void input(Camera& camera) {
 
     if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
@@ -972,18 +862,12 @@ void input(Camera& camera) {
         glfwSetWindowShouldClose(window, 1);
     }
 
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
-        if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
-            active_mouse = !active_mouse;
-            if (active_mouse == true)
-            {
-                polling_points = false;
-                /*
-                points_buffer.clear();
-                points.clear();
-                intersected_points.clear();
-                */
-            }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS and glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS)
+    {
+        active_mouse = !active_mouse;
+        if (active_mouse == true)
+        {
+            polling_points = false;
         }
     }
 
@@ -1126,4 +1010,100 @@ void addSphereInstance(Ray ray, glm::vec2 t_vals, float size, float distance)
 
     instanceMatrix.push_back(trans * rot * sca);
     bounding_spheres.emplace_back(tempTranslation, size * 0.595f);
+}
+
+void updateSphereInstances(glm::vec3 pos, float size, float height)
+{
+    auto t_start = std::chrono::high_resolution_clock::now();
+    std::vector<glm::mat4> interpolated_instanceMatrix;
+    for (int i = 0; i < instanceMatrix.size(); i++)
+    {
+        glm::vec3 tempTranslation = bounding_spheres[i].origin * height;
+        glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        glm::vec3 tempScale = glm::vec3(size, size, size);
+
+        glm::mat4 trans = glm::mat4(1.0f);
+        glm::mat4 rot = glm::mat4(1.0f);
+        glm::mat4 sca = glm::mat4(1.0f);
+
+        trans = glm::translate(trans, tempTranslation);
+        rot = glm::mat4_cast(tempRotation);
+        sca = glm::scale(sca, tempScale);
+
+        instanceMatrix[i] = trans * rot * sca;
+    }
+    if (useInterpolated)
+    {
+        curve = new Curve();
+        curve->samples = interpolation_samples;
+        for (int i = 0; i < bounding_spheres.size(); i++)
+            curve->add_point(bounding_spheres[i].origin * height);
+
+        for (int i = 0; i < curve->points.size(); i++) {
+            glm::vec3 tempTranslation = curve->at(i);
+            glm::quat tempRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+            glm::vec3 tempScale = glm::vec3(size, size, size);
+
+            glm::mat4 trans = glm::mat4(1.0f);
+            glm::mat4 rot = glm::mat4(1.0f);
+            glm::mat4 sca = glm::mat4(1.0f);
+
+            trans = glm::translate(trans, tempTranslation);
+            rot = glm::mat4_cast(tempRotation);
+            sca = glm::scale(sca, tempScale);
+
+            interpolated_instanceMatrix.push_back(trans * rot * sca);
+
+        }
+        std::cout << "Num of interpolated spheres" << interpolated_instanceMatrix.size() << std::endl;
+        spheres = Model(pos, glm::vec3(size * 0.1), true, interpolated_instanceMatrix.size(),
+                        interpolated_instanceMatrix);
+        spheres.loadModel("uvsphere/uvsphere.obj");
+    }
+    else
+    {
+        std::cout << "Num of spheres" << instanceMatrix.size() << std::endl;
+        spheres = Model(pos, glm::vec3(size * 0.1), true, instanceMatrix.size(), instanceMatrix);
+        spheres.loadModel("uvsphere/uvsphere.obj");
+    }
+    auto t_now = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+    printf("Time to update the Instances %f ms\n", time);
+}
+
+
+void replayCamWithDrawing(Camera& cam)
+{
+    if (curve->points.empty())
+    {
+        std::cout << "Empty Curve" << std::endl;
+        return;
+    }
+    cam.positions.clear();
+    cam.orientations.clear();
+
+    Curve *detailed_curve = new Curve();
+    detailed_curve->samples = 35;
+    for (int i = 0; i < curve->points.size(); i++)
+        detailed_curve->add_point(curve->at(i));
+
+    int N = 10;
+    for (int i = N; i < detailed_curve->points.size() - N; i++) {
+        auto currPos = detailed_curve->at(i);
+        auto nextPos = detailed_curve->at(i + 1);
+
+        glm::vec3 avg_orientation = glm::normalize(nextPos - currPos);
+        glm::vec3 avg_pos = currPos;
+        for (int j = -N; j < N - 1; j++) {
+            avg_orientation += glm::normalize(detailed_curve->at(i - j) - detailed_curve->at(j));
+            avg_pos += detailed_curve->at(j);
+        }
+        avg_orientation /= float(N);
+        avg_pos /= float(N);
+
+        if (!glm::any(glm::isnan(avg_pos)) or !glm::any(glm::isnan(avg_orientation))) {
+            cam.positions.push_back(avg_pos);
+            cam.orientations.push_back(glm::normalize(avg_orientation));
+        }
+    }
 }
