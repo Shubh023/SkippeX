@@ -313,8 +313,9 @@ int main() {
     nanosuitModel = glm::scale(nanosuitModel, glm::vec3(mscale));
 
     /*
-    int boundingNonTriangleObjects = int(boundingObjects.size() - 1);
     auto nanosuit_triangles = nanosuit_model.populate_triangles(camera.projection * camera.view * nanosuitModel);
+    int boundingNonTriangleObjects = int(boundingObjects.size() - 1);
+
     for (const auto& triangle : nanosuit_triangles)
     {
         boundingObjects.push_back(triangle);
@@ -331,6 +332,14 @@ int main() {
 
     Model ball(boundingBall->origin, glm::vec3(size), true);
     ball.loadModel("uvsphere/uvsphere.obj");
+    /*
+    auto nanosuit_triangles = nanosuit_model.populate_triangles(camera.projection * camera.view * nanosuitModel);
+    printf("nanosuit triangles : %d\n", int(nanosuit_triangles.size()));
+    auto plane_triangles = plane.populate_triangles(camera.projection * camera.view * nanosuitModel);
+    printf("plane_triangles : %d\n", int(plane_triangles.size()));
+    auto uv_sphere_triangles = uv_sphere.populate_triangles(camera.projection * camera.view * nanosuitModel);
+    printf("ball_triangles : %d\n", int(uv_sphere_triangles.size()));
+    */
 
     // Frame Rectangle for framebuffers
     unsigned int rectVAO, rectVBO;
@@ -1103,8 +1112,9 @@ void updateSphereInstances(glm::vec3 pos, float size, float hdist)
         spheres->loadModel("uvsphere/uvsphere.obj");
     }
     auto t_now = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
-    printf("Time to update the Instances %f ms\n", time);
+    long time = std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_start).count();
+    printf("Time to update the Instances %ld ms\n", time);
+    printf("Current 2D Strokes %d\n", int(points.size()));
 }
 
 
