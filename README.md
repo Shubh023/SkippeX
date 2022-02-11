@@ -5,5 +5,6 @@
 - ```cd SkippeX```
 - ```mkdir build```
 - ```cmake ../CMakeLists.txt -B .```
+- ```make```
 - ```cd SkippeX```
 - ```./Skippex```
